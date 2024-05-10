@@ -23,6 +23,24 @@ import java.util.Random;
  * 
  * Inspirado en el código original de Manuel Jesús Gallego Vela.
  */
+/*
+ * CHECKS (TODOs)
+ * - Corregir la excepción que salta al meter sólo una letra cómo coordenada ✅
+ * - Cambia el programa para que sea cliente servidor mediate TCP ✅
+ * - En la comunicación va el resultado del disparo o las coordenadas ✅
+ * - Jugando el server contra el usuario que está en el lado del cliente ✅
+ * - El servidor guarda un ranking con el nombre y el número de disparos en el
+ * que ha sido derrotado (sólo lo garda en el caso de que el usuario desde el
+ * lado cliente gane)
+ * - Menú inicial con 3 opciones:
+ * Jugar
+ * Records
+ * Salir
+ * - Intenta realizar el trabajo de manera óptima y siguiendo los estándares de
+ * Java
+ * 
+ * AVANZADO: Avisa cuándo se hunde un barco
+ */
 public class Server {
     private ServerSocket serverSocket;
     private Socket clientSocket;
@@ -93,6 +111,7 @@ public class Server {
                 tiroCorrecto = false;
                 while (!tiroCorrecto) {
                     tiro = pedirCasilla();
+
                     // Verificamos si el tiro es correcto o no
                     if (tiro[0] != -1 && tiro[1] != -1) {
                         // Puede ser INCORRECTO porque ya haya tirado
@@ -310,11 +329,14 @@ public class Server {
     /*
      * M�todo mediante el cual el usuario introduce una casilla
      */
-    @SuppressWarnings("resource")
     private static int[] pedirCasilla() throws ClassNotFoundException, IOException {
         String linea = (String) in.readObject();
         linea = linea.toUpperCase();
         int[] t;
+
+        // TODO Corregir la excepción que salta al meter sólo una letra cómo coordenada
+        if (linea.length() != 2)
+            return new int[] { -1, -1 };
 
         // Comprobamos que lo introducido por el usaurio es correcto mediante una
         // expresi�n regular
@@ -345,8 +367,12 @@ public class Server {
     public static boolean evaluarTiro(char[][] mapa, int[] t) {
         int fila = t[0];
         int columna = t[1];
-        return mapa[fila][columna] == AGUA_NO_TOCADO || (mapa[fila][columna] >= '1' && mapa[fila][columna] <= '5');
 
+        // Corregir la excepción que salta al meter sólo una letra cómo coordenada
+        if (t.length < 2) {
+            return false;
+        }
+        return mapa[fila][columna] == AGUA_NO_TOCADO || (mapa[fila][columna] >= '1' && mapa[fila][columna] <= '5');
     }
 
     /*
@@ -360,10 +386,11 @@ public class Server {
         try {
             if (mapa[fila][columna] == AGUA_NO_TOCADO) {
                 mapa[fila][columna] = AGUA;
-                out.writeObject("AGUA");
+                out.writeObject("AGUA"); // TODO En la comunicación va el resultado del disparo o las coordenadas
             } else {
                 mapa[fila][columna] = TOCADO;
-                out.writeObject("HAS ALCANZADO A ALG�N BARCO");
+                out.writeObject("HAS ALCANZADO A ALG�N BARCO"); // En la comunicación va el resultado del disparo o las
+                                                                // coordenadas
                 --puntos;
             }
         } catch (IOException e) {
