@@ -2,50 +2,61 @@ package hundirflota;
 
 import java.io.*;
 import java.net.*;
+import java.util.Scanner;
 
 public class Client {
-    private Socket clientSocket;
+    private Socket socket;
     private ObjectOutputStream out;
     private ObjectInputStream in;
+    private Scanner scanner;
 
-    public void startConnection(String ip, int port) {
+    // TAMAÑO DEL TABLERO
+    final static int TAMANIO = 10;
+
+    public void start(String ip, int port) {
         try {
-            clientSocket = new Socket(ip, port);
-            out = new ObjectOutputStream(clientSocket.getOutputStream());
-            in = new ObjectInputStream(clientSocket.getInputStream());
+            socket = new Socket(ip, port);
+            out = new ObjectOutputStream(socket.getOutputStream());
+            in = new ObjectInputStream(socket.getInputStream());
+            scanner = new Scanner(System.in);
 
-            // Juego
+            // Recibir mensajes del servidor
+            new Thread(this::receiveMessages).start();
+
+            // Interactuar con el servidor
             playGame();
-
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private void playGame() {
+    private void receiveMessages() {
         try {
-            // Leer mensaje del servidor
-            String message = (String) in.readObject();
-            System.out.println("Servidor dice: " + message);
-
-            // Implementar la interacción con el servidor aquí
+            Object message;
+            while ((message = in.readObject()) != null) {
+                System.out.println(message.toString());
+            }
         } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
         }
     }
 
-    public void stopConnection() {
-        try {
-            in.close();
-            out.close();
-            clientSocket.close();
-        } catch (IOException e) {
-            e.printStackTrace();
+    private void playGame() {
+        while (true) {
+            try {
+                System.out.print("Introduzca la casilla (por ejemplo B4): ");
+                String casilla = scanner.nextLine();
+                out.writeObject(casilla);
+                out.flush();
+            } catch (IOException e) {
+                e.printStackTrace();
+                break;
+            }
         }
     }
 
     public static void main(String[] args) {
         Client client = new Client();
-        client.startConnection("127.0.0.1", 6666);
+        client.start("127.0.0.1", 6666);
     }
 }
