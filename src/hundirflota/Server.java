@@ -3,7 +3,6 @@ package hundirflota;
 import java.io.*;
 import java.net.*;
 import java.util.Random;
-import java.util.Scanner;
 
 /**
  * HUNDIR LA FLOTA
@@ -28,7 +27,7 @@ public class Server {
     private ServerSocket serverSocket;
     private Socket clientSocket;
     private static ObjectOutputStream out;
-    private ObjectInputStream in;
+    private static ObjectInputStream in;
 
     // CONSTANTES, que nos sirven para representar algunos valores
     final static char AGUA_NO_TOCADO = '.';
@@ -38,7 +37,7 @@ public class Server {
     // TAMAÑO DEL TABLERO
     final static int TAMANIO = 10;
 
-    public void start(int port) {
+    public void start(int port) throws SocketException {
         try {
             serverSocket = new ServerSocket(port);
             System.out.println("Servidor iniciado, esperando por cliente...");
@@ -116,7 +115,7 @@ public class Server {
                 char tipoTiro = (puntosOrdenadorAnterior - puntosOrdenador) > 0 ? TOCADO : AGUA;
                 actualizarMapaRegistro(mapaOrdenadorParaUsuario, tiro, tipoTiro);
                 out.writeObject("\nREGISTRO DEL MAPA DEL ORDENADOR");
-                out.writeObject(mapaOrdenadorParaUsuario);
+                imprimirMapa(mapaOrdenadorParaUsuario);
 
                 // El juego termina si el n�mero de puntos llega a 0
                 juegoTerminado = (puntosOrdenador == 0);
@@ -142,7 +141,7 @@ public class Server {
                 out.writeObject("EL VENCEDOR HA SIDO EL JUGADOR");
             } else
                 out.writeObject("EL VENCEDOR HA SIDO EL ORDENADOR");
-        } catch (IOException e) {
+        } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
         }
     }
@@ -160,7 +159,11 @@ public class Server {
 
     public static void main(String[] args) {
         Server server = new Server();
-        server.start(6666);
+        try {
+            server.start(6666);
+        } catch (SocketException e) {
+            System.out.println("El cliente se ha desconectado");
+        }
     }
 
     /*
@@ -300,7 +303,6 @@ public class Server {
         try {
             out.writeObject(map.toString());
         } catch (IOException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
     }
@@ -309,10 +311,8 @@ public class Server {
      * M�todo mediante el cual el usuario introduce una casilla
      */
     @SuppressWarnings("resource")
-    private static int[] pedirCasilla() {
-        Scanner sc = new Scanner(System.in);
-        System.out.println("Introduzca la casilla (por ejemplo B4): ");
-        String linea = sc.nextLine();
+    private static int[] pedirCasilla() throws ClassNotFoundException, IOException {
+        String linea = (String) in.readObject();
         linea = linea.toUpperCase();
         int[] t;
 
@@ -357,13 +357,17 @@ public class Server {
         int fila = t[0];
         int columna = t[1];
 
-        if (mapa[fila][columna] == AGUA_NO_TOCADO) {
-            mapa[fila][columna] = AGUA;
-            System.out.println("AGUA");
-        } else {
-            mapa[fila][columna] = TOCADO;
-            System.out.println("HAS ALCANZADO A ALG�N BARCO");
-            --puntos;
+        try {
+            if (mapa[fila][columna] == AGUA_NO_TOCADO) {
+                mapa[fila][columna] = AGUA;
+                out.writeObject("AGUA");
+            } else {
+                mapa[fila][columna] = TOCADO;
+                out.writeObject("HAS ALCANZADO A ALG�N BARCO");
+                --puntos;
+            }
+        } catch (IOException e) {
+            e.printStackTrace();
         }
 
         return puntos;

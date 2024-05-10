@@ -10,9 +10,6 @@ public class Client {
     private ObjectInputStream in;
     private Scanner scanner;
 
-    // TAMAÑO DEL TABLERO
-    final static int TAMANIO = 10;
-
     public void start(String ip, int port) {
         try {
             socket = new Socket(ip, port);
@@ -24,7 +21,11 @@ public class Client {
             new Thread(this::receiveMessages).start();
 
             // Interactuar con el servidor
-            playGame();
+            try {
+                playGame();
+            } catch (SocketException e) {
+                System.out.println("Desconectado");
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -36,12 +37,14 @@ public class Client {
             while ((message = in.readObject()) != null) {
                 System.out.println(message.toString());
             }
+        } catch (EOFException e) {
+            System.out.println("Desconectado");
         } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
         }
     }
 
-    private void playGame() {
+    private void playGame() throws SocketException {
         while (true) {
             try {
                 System.out.print("Introduzca la casilla (por ejemplo B4): ");
