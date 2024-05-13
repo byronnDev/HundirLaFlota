@@ -55,11 +55,12 @@ public class Server {
     // TAMAÑO DEL TABLERO
     final static int TAMANIO = 10;
 
+    //? TODO Cambia el programa para que sea cliente servidor mediate TCP
     public void start(int port) throws SocketException {
         try {
             serverSocket = new ServerSocket(port);
             System.out.println("Servidor iniciado, esperando por cliente...");
-            clientSocket = serverSocket.accept();
+            clientSocket = serverSocket.accept(); //? TODO Jugando el server contra el usuario que está en el lado del cliente
             System.out.println("Cliente conectado.");
 
             out = new ObjectOutputStream(clientSocket.getOutputStream());
@@ -334,7 +335,7 @@ public class Server {
         linea = linea.toUpperCase();
         int[] t;
 
-        // TODO Corregir la excepción que salta al meter sólo una letra cómo coordenada
+        //? TODO Corregir la excepción que salta al meter sólo una letra cómo coordenada
         if (linea.length() != 2)
             return new int[] { -1, -1 };
 
@@ -386,7 +387,7 @@ public class Server {
         try {
             if (mapa[fila][columna] == AGUA_NO_TOCADO) {
                 mapa[fila][columna] = AGUA;
-                out.writeObject("AGUA"); // TODO En la comunicación va el resultado del disparo o las coordenadas
+                out.writeObject("AGUA"); //? TODO En la comunicación va el resultado del disparo o las coordenadas
             } else {
                 mapa[fila][columna] = TOCADO;
                 out.writeObject("HAS ALCANZADO A ALG�N BARCO"); // En la comunicación va el resultado del disparo o las
