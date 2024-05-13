@@ -2,52 +2,19 @@ package hundirflota;
 
 import java.io.*;
 import java.net.*;
-import java.util.Random;
+import java.util.*;
 
 /**
  * HUNDIR LA FLOTA
- * 
- * Se trata de un juego clásico en el que nos enfrentamos al ordenador. Cada
- * usuario dispone de un mapa de 10x10
- * casillas donde se colocan barcos (dos de tamaño 5, tres de tamaño 3, y cinco
- * de tamaño 1).
- * Jugador y ordenador irán diciendo posiciones en el mapa, y el jugador opuesto
- * debe indicar si la "bomba"
- * ha caído en el agua o ha tocado algún barco.
- * 
- * Para simplificar el juego, en lugar de verificar si un barco completo se ha
- * hundido y cuántos barcos quedan a flote,
- * contabilizamos el número total de casillas correspondientes a un barco que no
- * han sido "hundidas". Se parte con
- * 24 puntos (5+5+3+3+3+1+1+1+1+1)
- * 
- * Inspirado en el código original de Manuel Jesús Gallego Vela.
- */
-/*
- * CHECKS (TODOs)
- * - Corregir la excepción que salta al meter sólo una letra cómo coordenada ✅
- * - Cambia el programa para que sea cliente servidor mediate TCP ✅
- * - En la comunicación va el resultado del disparo o las coordenadas ✅
- * - Jugando el server contra el usuario que está en el lado del cliente ✅
- * - El servidor guarda un ranking con el nombre y el número de disparos en el
- * que ha sido derrotado (sólo lo garda en el caso de que el usuario desde el
- * lado cliente gane)
- * - Menú inicial con 3 opciones:
- * Jugar
- * Records
- * Salir
- * - Intenta realizar el trabajo de manera óptima y siguiendo los estándares de
- * Java
- * 
- * AVANZADO: Avisa cuándo se hunde un barco
  */
 public class Server {
     private ServerSocket serverSocket;
     private Socket clientSocket;
     private static ObjectOutputStream out;
     private static ObjectInputStream in;
+    private static final String RECORDS_FILE = "ranking.txt";
 
-    // CONSTANTES, que nos sirven para representar algunos valores
+    // CONSTANTES
     final static char AGUA_NO_TOCADO = '.';
     final static char AGUA = 'A';
     final static char TOCADO = 'X';
@@ -55,89 +22,112 @@ public class Server {
     // TAMAÑO DEL TABLERO
     final static int TAMANIO = 10;
 
-    //? TODO Cambia el programa para que sea cliente servidor mediate TCP
-    public void start(int port) throws SocketException {
-        try {
-            serverSocket = new ServerSocket(port);
-            System.out.println("Servidor iniciado, esperando por cliente...");
-            clientSocket = serverSocket.accept(); //? TODO Jugando el server contra el usuario que está en el lado del cliente
+    // Mapa de barcos, impactos y hundimiento
+    private Map<Character, Integer> shipSizes = new HashMap<>();
+    private Map<Character, Integer> shipHits = new HashMap<>();
+    private Map<Character, Boolean> shipSunk = new HashMap<>();
+
+    public Server() {
+        shipSizes.put('5', 5); // Two ships of size 5
+        shipSizes.put('3', 3); // Three ships of size 3
+        shipSizes.put('1', 1); // Five ships of size 1
+        shipHits.put('5', 0);
+        shipHits.put('3', 0);
+        shipHits.put('1', 0);
+        shipSunk.put('5', false);
+        shipSunk.put('3', false);
+        shipSunk.put('1', false);
+    }
+
+    public void start(int port) throws IOException {
+        serverSocket = new ServerSocket(port);
+        System.out.println("Servidor iniciado en el puerto " + port);
+
+        while (true) {
+            System.out.println("Esperando conexión del cliente...");
+            clientSocket = serverSocket.accept();
             System.out.println("Cliente conectado.");
 
             out = new ObjectOutputStream(clientSocket.getOutputStream());
             in = new ObjectInputStream(clientSocket.getInputStream());
 
-            out.writeObject("Bienvenido al juego Hundir la Flota!");
+            try {
+                processClientRequests();
+            } catch (IOException e) {
+                System.out.println("Cliente desconectado.");
+            } finally {
+                in.close();
+                out.close();
+                clientSocket.close();
+            }
+        }
+    }
 
-            // Manejo del juego
-            playGame();
-
-            stop();
-        } catch (IOException e) {
-            e.printStackTrace();
+    private void processClientRequests() throws IOException {
+        try {
+            Object message;
+            while ((message = in.readObject()) != null) {
+                String command = message.toString();
+                if ("play".equalsIgnoreCase(command)) {
+                    playGame();
+                } else if ("records".equalsIgnoreCase(command)) {
+                    sendRecords();
+                } else if ("exit".equalsIgnoreCase(command)) {
+                    return;
+                }
+            }
+        } catch (ClassNotFoundException e) {
+            System.out.println("Error en la comunicación con el servidor.");
         }
     }
 
     private void playGame() {
-        // Lógica del juego
-        // Mapa del usuario y del ordenador
         char[][] mapaUsuario = new char[TAMANIO][TAMANIO];
         char[][] mapaOrdenador = new char[TAMANIO][TAMANIO];
-        // Este tercer mapa nos sirve para anotar y visualizar
-        // las tiradas que hacemos sobre el mapa del ordenador
         char[][] mapaOrdenadorParaUsuario = new char[TAMANIO][TAMANIO];
-        // Puntos con los que comienzan las partidas
         int puntosUsuario = 24;
         int puntosOrdenador = 24;
-        // Lleva el control del programa.
-        // Si no quedan barcos a flote del jugador o el ordenador, lo ponemos a true
         boolean juegoTerminado = false;
-        // Indica si el tiro es correcto, para volver a realizar otro
+
         try {
             boolean tiroCorrecto = false;
-            // Posiciones de la tirada
             int[] tiro = new int[2];
-            // Inicializamos los mapas, colocando los barcos
             inicializacion(mapaUsuario, mapaOrdenador);
-            // Inicializamos el mapa de registro a AGUA_NO_TOCADO
             inicializaMapaRegistro(mapaOrdenadorParaUsuario);
-            // Mientras queden barcos a flote
+
             while (!juegoTerminado) {
-                // Al principio del turno, pintamos el mapa del usuario
                 out.writeObject("MAPA DEL USUARIO:\n");
                 imprimirMapa(mapaUsuario);
                 out.writeObject("PUNTOS RESTANTES DEL JUGADOR: " + puntosUsuario);
                 out.writeObject("TURNO DEL JUGADOR");
 
-                // Comenzamos con la tirada del usuario
                 tiroCorrecto = false;
                 while (!tiroCorrecto) {
                     tiro = pedirCasilla();
 
-                    // Verificamos si el tiro es correcto o no
                     if (tiro[0] != -1 && tiro[1] != -1) {
-                        // Puede ser INCORRECTO porque ya haya tirado
-                        // sobre esas coordenadas
                         tiroCorrecto = evaluarTiro(mapaOrdenador, tiro);
                         if (!tiroCorrecto)
                             out.writeObject("TIRO INCORRECTO");
                     } else {
                         out.writeObject("TIRO INCORRECTO");
                     }
-                    // De no serlo, el jugador debe volver a tirar
                 }
 
-                // Actualizamos mapa del ordenador y los puntos
                 int puntosOrdenadorAnterior = puntosOrdenador;
                 puntosOrdenador = actualizarMapa(mapaOrdenador, tiro, puntosOrdenador);
-                // Actualizamos nuestro mapa de registro y lo enviamos al cliente.
-                // Sabemos si la tirada ha sido AGUA O TOCADO si el número de puntos se ha
-                // decrementado.
                 char tipoTiro = (puntosOrdenadorAnterior - puntosOrdenador) > 0 ? TOCADO : AGUA;
                 actualizarMapaRegistro(mapaOrdenadorParaUsuario, tiro, tipoTiro);
                 out.writeObject("\nREGISTRO DEL MAPA DEL ORDENADOR");
                 imprimirMapa(mapaOrdenadorParaUsuario);
 
-                // El juego termina si el n�mero de puntos llega a 0
+                // Comprueba si se ha hundido un barco
+                char barcoHundido = verificarHundimiento(mapaOrdenador, tiro);
+                if (barcoHundido != '\0') {
+                    out.writeObject("¡Barco de tamaño " + shipSizes.get(barcoHundido) + " hundido!");
+                }
+
+                // El juego termina si el número de puntos llega a 0
                 juegoTerminado = (puntosOrdenador == 0);
 
                 // Si no ha ganado el jugador, le toca a la máquina
@@ -145,24 +135,74 @@ public class Server {
                     out.writeObject("PUNTOS RESTANTES DEL ORDENADOR: " + puntosOrdenador);
                     out.writeObject("TURNO DEL ORDENADOR");
                     tiroCorrecto = false;
-                    // Seguimos los mismos parámetros de comprobación que en la tirada del usuario
                     while (!tiroCorrecto) {
                         tiro = generaDisparoAleatorio();
                         tiroCorrecto = evaluarTiro(mapaUsuario, tiro);
                     }
 
-                    // Actualizamos mapa
                     puntosUsuario = actualizarMapa(mapaUsuario, tiro, puntosUsuario);
-                    // El juego termina si el número de puntos llega a 0
+
+                    // Comprueba si se ha hundido un barco
+                    barcoHundido = verificarHundimiento(mapaUsuario, tiro);
+                    if (barcoHundido != '\0') {
+                        out.writeObject(
+                                "¡El ordenador ha hundido un barco de tamaño " + shipSizes.get(barcoHundido) + "!");
+                    }
+
                     juegoTerminado = (puntosUsuario == 0);
                 }
-            } // FIN DE LA PARTIDA. Alguien ha ganado
+            }
+
             if (puntosOrdenador == 0) {
                 out.writeObject("EL VENCEDOR HA SIDO EL JUGADOR");
-            } else
+                updateRecords("Jugador", 24 - puntosUsuario);
+            } else {
                 out.writeObject("EL VENCEDOR HA SIDO EL ORDENADOR");
+            }
         } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
+        }
+    }
+
+    private void sendRecords() throws IOException {
+        File file = new File(RECORDS_FILE);
+        if (!file.exists()) {
+            out.writeObject("No records found.");
+            out.writeObject("END_OF_RECORDS");
+            return;
+        }
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String record;
+            while ((record = reader.readLine()) != null) {
+                out.writeObject(record);
+            }
+        } catch (FileNotFoundException e) {
+            out.writeObject("Records file not found.");
+        } catch (IOException e) {
+            out.writeObject("Error reading records file.");
+        }
+
+        out.writeObject("END_OF_RECORDS");
+    }
+
+    private void updateRecords(String playerName, int shots) {
+        try (PrintWriter out = new PrintWriter(new FileWriter(RECORDS_FILE, true))) {
+            out.println(playerName + " - " + shots);
+        } catch (IOException e) {
+            System.out.println("Error al escribir en el archivo de records.");
+        }
+    }
+
+    public void showRecords() {
+        System.out.println("Ranking de jugadores:");
+        try (BufferedReader reader = new BufferedReader(new FileReader(RECORDS_FILE))) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                System.out.println(line);
+            }
+        } catch (IOException e) {
+            System.out.println("Error al leer el archivo de records.");
         }
     }
 
@@ -183,118 +223,158 @@ public class Server {
             server.start(6666);
         } catch (SocketException e) {
             System.out.println("El cliente se ha desconectado");
+        } catch (IOException e) {
+            e.printStackTrace();
         }
     }
 
-    /*
-     * Método que sirve para que el ordenador pueda hacer un disparo
-     */
     private static int[] generaDisparoAleatorio() {
         return new int[] { aleatorio(), aleatorio() };
     }
 
-    /*
-     * Método que aglutina la inicialización de ambos mapas
-     */
     public static void inicializacion(char[][] m1, char[][] m2) {
         inicializaMapa(m1);
         inicializaMapa(m2);
     }
 
-    /*
-     * Método que inicializa el mapa que mostramos al usuario
-     * con las tiradas que ha hecho sobre el mapa del ordenador.
-     */
     private static void inicializaMapaRegistro(char[][] mapa) {
-        // Inicializamos el mapa entero a AGUA_NO_TOCADO
         for (int i = 0; i < TAMANIO; i++)
             for (int j = 0; j < TAMANIO; j++)
                 mapa[i][j] = AGUA_NO_TOCADO;
     }
 
-    /*
-     * Método que inicializa un mapa de juego, colocando
-     * los barcos sobre el mismo.
-     */
     private static void inicializaMapa(char[][] mapa) {
-        // Inicializamos el mapa entero a AGUA_NO_TOCADO
         for (int i = 0; i < TAMANIO; i++)
             for (int j = 0; j < TAMANIO; j++)
                 mapa[i][j] = AGUA_NO_TOCADO;
 
-        // 2 portaaviones (5 casillas)
-        // 3 buques (3 casillas)
-        // 5 lanchas (1 casilla)
-        int[] barcos = { 5, 5, 3, 3, 3, 1, 1, 1, 1, 1 };
+        // Coloca los barcos en el mapa
+        colocarBarcos(mapa, '5', 2); // Dos barcos de tamaño 5
+        colocarBarcos(mapa, '3', 3); // Tres barcos de tamaño 3
+        colocarBarcos(mapa, '1', 5); // Cinco barcos de tamaño 1
+    }
 
-        // Posible dirección de colocación del barco
-        char[] direccion = { 'V', 'H' };
+    /*
+     * Método que coloca los barcos en el mapa.
+     * 
+     * @param mapa El mapa donde se van a colocar los barcos
+     * 
+     * @param tipoBarco El carácter que representa el tipo de barco
+     * 
+     * @param cantidad La cantidad de barcos de ese tipo
+     */
+    private static void colocarBarcos(char[][] mapa, char tipoBarco, int cantidad) {
+        int tamano = tipoBarco == '5' ? 5 : (tipoBarco == '3' ? 3 : 1);
+        Random rand = new Random();
 
-        // Para cada barco
-        for (int b : barcos) {
-            // Intentamos tantas veces sea necesarias para colocar el barco en el mapa.
-            // Vamos de mayor tamaño a menor, para que sea menos
-            // dificultoso encontrar un hueco
+        for (int i = 0; i < cantidad; i++) {
             boolean colocado = false;
             while (!colocado) {
-                // Obtenemos una posición y dirección aleatorias
-                int fila = aleatorio();
-                int columna = aleatorio();
-                char direcc = direccion[aleatorio() % 2];
+                int fila = rand.nextInt(TAMANIO);
+                int columna = rand.nextInt(TAMANIO);
+                boolean horizontal = rand.nextBoolean();
 
-                // �Cabe el barco en la posici�n indicada?
-                if (direcc == 'V') {
-                    if (fila + b <= (TAMANIO - 1)) {
-                        // comprobamos que no hay otro barco que se solape
-                        boolean otro = false;
-                        for (int i = fila; (i <= fila + b) && !otro; i++) {
-                            if (mapa[i][columna] != AGUA_NO_TOCADO)
-                                otro = true;
-                        }
-                        // Si no hay otro barco, lo colocamos
-                        if (!otro) {
-                            for (int i = fila; i < fila + b; i++) {
-                                mapa[i][columna] = Integer.toString(b).charAt(0);
-                            }
-                            colocado = true;
+                if (puedeColocarBarco(mapa, fila, columna, tamano, horizontal)) {
+                    for (int j = 0; j < tamano; j++) {
+                        if (horizontal) {
+                            mapa[fila][columna + j] = tipoBarco;
+                        } else {
+                            mapa[fila + j][columna] = tipoBarco;
                         }
                     }
-                } else { // direcc == 'H'
-                    if (columna + b <= (TAMANIO - 1)) {
-                        // comprobamos que no hay otro barco que se solape
-                        boolean otro = false;
-                        for (int j = columna; (j <= columna + b) && !otro; j++) {
-                            if (mapa[fila][j] != AGUA_NO_TOCADO)
-                                otro = true;
-                        }
-                        // Si no hay otro barco, lo colocamos
-                        if (!otro) {
-                            for (int j = columna; j < columna + b; j++) {
-                                mapa[fila][j] = Integer.toString(b).charAt(0);
-                            }
-                            colocado = true;
-                        }
-                    }
+                    colocado = true;
                 }
-
             }
         }
-
     }
 
     /*
-     * M�todo que nos devuelve un n�mero aleatorio
+     * Método que verifica si se puede colocar un barco en una posición dada.
      */
-    private static int aleatorio() {
-        Random r = new Random(System.currentTimeMillis());
-        return r.nextInt(TAMANIO);
+    private static boolean puedeColocarBarco(char[][] mapa, int fila, int columna, int tamano, boolean horizontal) {
+        if (horizontal) {
+            if (columna + tamano > TAMANIO)
+                return false;
+            for (int j = 0; j < tamano; j++) {
+                if (mapa[fila][columna + j] != AGUA_NO_TOCADO)
+                    return false;
+            }
+        } else {
+            if (fila + tamano > TAMANIO)
+                return false;
+            for (int j = 0; j < tamano; j++) {
+                if (mapa[fila + j][columna] != AGUA_NO_TOCADO)
+                    return false;
+            }
+        }
+        return true;
     }
 
     /*
-     * M�todo que imprime un mapa, con una fila y columna de encabezados
+     * Método que pide una casilla al cliente.
      */
-    public static void imprimirMapa(char[][] mapa) {
+    private static int[] pedirCasilla() throws ClassNotFoundException, IOException {
+        String linea = (String) in.readObject();
+        linea = linea.toUpperCase();
+        int[] t;
 
+        // Comprobamos que lo introducido por el usaurio es correcto mediante una
+        // expresi�n regular
+        if (linea.matches("^[A-Z][0-9]*$")) {
+
+            // Obtenemos la letra.
+            // Suponemos que, como mucho, usaremos una letra del abecedario
+            char letra = linea.charAt(0);
+            // El n�mero de fila es VALOR_NUMERICO(LETRA) - VALOR_NUMERICO(A).
+            int fila = Character.getNumericValue(letra) - Character.getNumericValue('A');
+            // Para la columna, tan solo tenemos que procesar el n�mero
+            int columna = Integer.parseInt(linea.substring(1, linea.length()));
+            // Si las coordenadas est�n dentro del tama�o del tablero, las devolvemos
+            if (fila >= 0 && fila < TAMANIO && columna >= 0 && columna <= TAMANIO) {
+                t = new int[] { fila, columna };
+            } else // En otro caso, devolvemos -1, para que vuelva a solicitar el tiro
+                t = new int[] { -1, -1 };
+        } else
+            t = new int[] { -1, -1 };
+
+        return t;
+    }
+
+    /*
+     * Método que evalúa si un disparo es válido.
+     */
+    public static boolean evaluarTiro(char[][] mapa, int[] t) {
+        int fila = t[0];
+        int columna = t[1];
+        return mapa[fila][columna] == AGUA_NO_TOCADO || (mapa[fila][columna] >= '1' && mapa[fila][columna] <= '5');
+    }
+
+    /*
+     * Método que actualiza el mapa después de un disparo.
+     */
+    private int actualizarMapa(char[][] mapa, int[] tiro, int puntos) {
+        char casilla = mapa[tiro[0]][tiro[1]];
+        if (Character.isDigit(casilla)) {
+            mapa[tiro[0]][tiro[1]] = TOCADO;
+            shipHits.put(casilla, shipHits.get(casilla) + 1);
+            puntos--;
+        } else {
+            mapa[tiro[0]][tiro[1]] = AGUA;
+        }
+        return puntos;
+    }
+
+    /*
+     * Método que actualiza el mapa de registro.
+     */
+    private static void actualizarMapaRegistro(char[][] mapaRegistro, int[] tiro, char tipoTiro) {
+        mapaRegistro[tiro[0]][tiro[1]] = tipoTiro;
+    }
+
+    /*
+     * Método que imprime un mapa.
+     */
+    private static void imprimirMapa(char[][] mapa) throws IOException {
         // Create a string to store the map
         StringBuilder map = new StringBuilder();
 
@@ -328,88 +408,24 @@ public class Server {
     }
 
     /*
-     * M�todo mediante el cual el usuario introduce una casilla
+     * Método que verifica si un barco se ha hundido.
      */
-    private static int[] pedirCasilla() throws ClassNotFoundException, IOException {
-        String linea = (String) in.readObject();
-        linea = linea.toUpperCase();
-        int[] t;
-
-        //? TODO Corregir la excepción que salta al meter sólo una letra cómo coordenada
-        if (linea.length() != 2)
-            return new int[] { -1, -1 };
-
-        // Comprobamos que lo introducido por el usaurio es correcto mediante una
-        // expresi�n regular
-        if (linea.matches("^[A-Z][0-9]*$")) {
-
-            // Obtenemos la letra.
-            // Suponemos que, como mucho, usaremos una letra del abecedario
-            char letra = linea.charAt(0);
-            // El n�mero de fila es VALOR_NUMERICO(LETRA) - VALOR_NUMERICO(A).
-            int fila = Character.getNumericValue(letra) - Character.getNumericValue('A');
-            // Para la columna, tan solo tenemos que procesar el n�mero
-            int columna = Integer.parseInt(linea.substring(1, linea.length()));
-            // Si las coordenadas est�n dentro del tama�o del tablero, las devolvemos
-            if (fila >= 0 && fila < TAMANIO && columna >= 0 && columna <= TAMANIO) {
-                t = new int[] { fila, columna };
-            } else // En otro caso, devolvemos -1, para que vuelva a solicitar el tiro
-                t = new int[] { -1, -1 };
-        } else
-            t = new int[] { -1, -1 };
-
-        return t;
-    }
-
-    /*
-     * M�todo que nos permite evaluar si un tiro es CORRECTO (AGUA o TOCADO)
-     * o se trata de una casilla por la que ya hemos pasado antes.
-     */
-    public static boolean evaluarTiro(char[][] mapa, int[] t) {
-        int fila = t[0];
-        int columna = t[1];
-
-        // Corregir la excepción que salta al meter sólo una letra cómo coordenada
-        if (t.length < 2) {
-            return false;
-        }
-        return mapa[fila][columna] == AGUA_NO_TOCADO || (mapa[fila][columna] >= '1' && mapa[fila][columna] <= '5');
-    }
-
-    /*
-     * M�todo que actualiza el mapa, con un determinado tiro.
-     * Devolvemos el n�mero de puntos restantes.
-     */
-    private static int actualizarMapa(char[][] mapa, int[] t, int puntos) {
-        int fila = t[0];
-        int columna = t[1];
-
-        try {
-            if (mapa[fila][columna] == AGUA_NO_TOCADO) {
-                mapa[fila][columna] = AGUA;
-                out.writeObject("AGUA"); //? TODO En la comunicación va el resultado del disparo o las coordenadas
-            } else {
-                mapa[fila][columna] = TOCADO;
-                out.writeObject("HAS ALCANZADO A ALG�N BARCO"); // En la comunicación va el resultado del disparo o las
-                                                                // coordenadas
-                --puntos;
+    private char verificarHundimiento(char[][] mapa, int[] tiro) {
+        char barco = mapa[tiro[0]][tiro[1]];
+        if (Character.isDigit(barco)) {
+            int hits = shipHits.get(barco);
+            if (hits == shipSizes.get(barco)) {
+                shipSunk.put(barco, true);
+                return barco;
             }
-        } catch (IOException e) {
-            e.printStackTrace();
         }
-
-        return puntos;
-
+        return '\0';
     }
 
     /*
-     * M�todo que actualiza el mapa de registro
+     * Método que genera un índice aleatorio.
      */
-    private static void actualizarMapaRegistro(char[][] mapa, int[] t, char valor) {
-        int fila = t[0];
-        int columna = t[1];
-
-        mapa[fila][columna] = valor;
+    private static int aleatorio() {
+        return new Random().nextInt(TAMANIO);
     }
-
 }
