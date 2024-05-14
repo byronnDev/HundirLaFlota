@@ -115,16 +115,16 @@ public class Client {
             scanner.close();
     }
 
-    public static void main(String[] args) {
-        String host = "localhost";
-        int port = 6666;
-        Client client = new Client();
-        try {
-            client.connectToServer(host, port);
-            client.start();
-        } catch (IOException e) {
-            System.out.println("Failed to connect to the server: " + e.getMessage());
-            e.printStackTrace();
-        }
-    }
+    // public static void main(String[] args) {
+    // String host = "localhost";
+    // int port = 6666;
+    // Client client = new Client();
+    // try {
+    // client.connectToServer(host, port);
+    // client.start();
+    // } catch (IOException e) {
+    // System.out.println("Failed to connect to the server: " + e.getMessage());
+    // e.printStackTrace();
+    // }
+    // }
 }

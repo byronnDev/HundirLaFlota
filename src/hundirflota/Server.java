@@ -48,15 +48,18 @@ public class Server {
     private Map<Character, Boolean> shipSunk = new HashMap<>();
 
     public Server() {
-        shipSizes.put('5', 5); // Two ships of size 5
-        shipSizes.put('3', 3); // Three ships of size 3
-        shipSizes.put('1', 1); // Five ships of size 1
-        shipHits.put('5', 0);
-        shipHits.put('3', 0);
-        shipHits.put('1', 0);
-        shipSunk.put('5', false);
-        shipSunk.put('3', false);
-        shipSunk.put('1', false);
+        inicializaDatosBarcos();
+    }
+
+    private void inicializaDatosBarcos() {
+        shipSizes.put('5', 5); // Dos barcos de tamaño 5
+        shipSizes.put('3', 3); // Tres barcos de tamaño 3
+        shipSizes.put('1', 1); // Cinco barcos de tamaño 1
+
+        for (Character shipType : shipSizes.keySet()) {
+            shipHits.put(shipType, 0);
+            shipSunk.put(shipType, false);
+        }
     }
 
     public void start(int port) throws IOException {
@@ -107,14 +110,7 @@ public class Server {
     }
 
     private void playGame() {
-        GameData gameData = new GameData();
-        gameData.setMapaUsuario(new char[TAMANIO][TAMANIO]);
-        gameData.setMapaOrdenador(new char[TAMANIO][TAMANIO]);
-        gameData.setMapaOrdenadorParaUsuario(new char[TAMANIO][TAMANIO]);
-        gameData.setPuntosUsuario(24);
-        gameData.setPuntosOrdenador(24);
-        gameData.setJuegoTerminado(false);
-
+        GameData gameData = inicializaJuego();
         nombreJugador = pedirNombreUsuario();
 
         try {
@@ -153,7 +149,8 @@ public class Server {
             }
 
             int puntosOrdenadorAnterior = gameData.getPuntosOrdenador();
-            gameData.setPuntosOrdenador(actualizarMapa(gameData.mapaOrdenador, tiro, gameData.getPuntosOrdenador()));
+            gameData.setPuntosOrdenador(
+                    actualizarMapa(gameData.getMapaOrdenador(), tiro, gameData.getPuntosOrdenador()));
             char tipoTiro = (puntosOrdenadorAnterior - gameData.getPuntosOrdenador()) > 0 ? TOCADO : AGUA;
             actualizarMapaRegistro(gameData.getMapaOrdenadorParaUsuario(), tiro, tipoTiro);
             out.writeObject("\nREGISTRO DEL MAPA DEL ORDENADOR");
@@ -161,7 +158,7 @@ public class Server {
 
             // Comprueba si se ha hundido un barco del ordenador
             char barcoHundido = verificarHundimiento(gameData.getMapaOrdenador(), tiro);
-            if (isNotBarcoHundido(barcoHundido)) {
+            if (isBarcoHundido(barcoHundido)) {
                 out.writeObject("¡Barco de tamaño " + shipSizes.get(barcoHundido) + " hundido!");
             }
 
@@ -182,9 +179,8 @@ public class Server {
 
                 // Comprueba si se ha hundido un barco del usuario
                 barcoHundido = verificarHundimiento(gameData.getMapaUsuario(), tiro);
-                if (isNotBarcoHundido(barcoHundido)) {
-                    out.writeObject(
-                            "¡El ordenador ha hundido un barco de tamaño " + shipSizes.get(barcoHundido) + "!");
+                if (isBarcoHundido(barcoHundido)) {
+                    out.writeObject("¡El ordenador ha hundido un barco de tamaño " + shipSizes.get(barcoHundido) + "!");
                 }
 
                 gameData.setJuegoTerminado((gameData.getPuntosUsuario() == 0));
@@ -200,7 +196,18 @@ public class Server {
         stop();
     }
 
-    private boolean isNotBarcoHundido(char barcoHundido) {
+    private GameData inicializaJuego() {
+        GameData gameData = new GameData();
+        gameData.setMapaUsuario(new char[TAMANIO][TAMANIO]);
+        gameData.setMapaOrdenador(new char[TAMANIO][TAMANIO]);
+        gameData.setMapaOrdenadorParaUsuario(new char[TAMANIO][TAMANIO]);
+        gameData.setPuntosUsuario(24);
+        gameData.setPuntosOrdenador(24);
+        gameData.setJuegoTerminado(false);
+        return gameData;
+    }
+
+    private boolean isBarcoHundido(char barcoHundido) {
         return barcoHundido != '\0';
     }
 
@@ -261,16 +268,16 @@ public class Server {
         }
     }
 
-    public static void main(String[] args) {
-        Server server = new Server();
-        try {
-            server.start(6666);
-        } catch (SocketException e) {
-            System.out.println("El cliente se ha desconectado");
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-    }
+    // public static void main(String[] args) {
+    // Server server = new Server();
+    // try {
+    // server.start(6666);
+    // } catch (SocketException e) {
+    // System.out.println("El cliente se ha desconectado");
+    // } catch (IOException e) {
+    // e.printStackTrace();
+    // }
+    // }
 
     private static int[] generaDisparoAleatorio() {
         return new int[] { aleatorio(), aleatorio() };
