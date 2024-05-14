@@ -13,6 +13,7 @@ public class Server {
     private static ObjectOutputStream out;
     private static ObjectInputStream in;
     private static final String RECORDS_FILE = "ranking.txt";
+    private static String nombreJugador = "Jugador"; // Nombre del jugador por defecto
 
     // CONSTANTES
     final static char AGUA_NO_TOCADO = '.';
@@ -73,6 +74,7 @@ public class Server {
                 } else if ("records".equalsIgnoreCase(command)) {
                     sendRecords();
                 } else if ("exit".equalsIgnoreCase(command)) {
+                    stop();
                     return;
                 }
             }
@@ -89,9 +91,13 @@ public class Server {
         int puntosOrdenador = 24;
         boolean juegoTerminado = false;
 
+        nombreJugador = pedirNombreUsuario();
+
         try {
             boolean tiroCorrecto = false;
             int[] tiro = new int[2];
+
+            out.writeObject("¡Bienvenido a Hundir la Flota, " + nombreJugador + "!");
             inicializacion(mapaUsuario, mapaOrdenador);
             inicializaMapaRegistro(mapaOrdenadorParaUsuario);
 
@@ -121,7 +127,7 @@ public class Server {
                 out.writeObject("\nREGISTRO DEL MAPA DEL ORDENADOR");
                 imprimirMapa(mapaOrdenadorParaUsuario);
 
-                // Comprueba si se ha hundido un barco
+                // Comprueba si se ha hundido un barco del ordenador
                 char barcoHundido = verificarHundimiento(mapaOrdenador, tiro);
                 if (barcoHundido != '\0') {
                     out.writeObject("¡Barco de tamaño " + shipSizes.get(barcoHundido) + " hundido!");
@@ -142,7 +148,7 @@ public class Server {
 
                     puntosUsuario = actualizarMapa(mapaUsuario, tiro, puntosUsuario);
 
-                    // Comprueba si se ha hundido un barco
+                    // Comprueba si se ha hundido un barco del usuario
                     barcoHundido = verificarHundimiento(mapaUsuario, tiro);
                     if (barcoHundido != '\0') {
                         out.writeObject(
@@ -155,12 +161,22 @@ public class Server {
 
             if (puntosOrdenador == 0) {
                 out.writeObject("EL VENCEDOR HA SIDO EL JUGADOR");
-                updateRecords("Jugador", 24 - puntosUsuario);
+                updateRecords(nombreJugador, 24 - puntosUsuario);
             } else {
                 out.writeObject("EL VENCEDOR HA SIDO EL ORDENADOR");
             }
         } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
+        }
+    }
+
+    private String pedirNombreUsuario() {
+        try {
+            out.writeObject("Introduce tu nombre: ");
+            return (String) in.readObject();
+        } catch (IOException | ClassNotFoundException e) {
+            System.err.println("Error al leer el nombre del jugador. Se usará el nombre por defecto.");
+            return "Jugador";
         }
     }
 
@@ -314,9 +330,14 @@ public class Server {
      * Método que pide una casilla al cliente.
      */
     private static int[] pedirCasilla() throws ClassNotFoundException, IOException {
+        out.writeObject("Introduce la casilla (por ejemplo, B4): ");
         String linea = (String) in.readObject();
         linea = linea.toUpperCase();
         int[] t;
+
+        // Comprobamos que la longitud de la cadena sea mayor que 2
+        if (linea.length() < 2)
+            return new int[] { -1, -1 }; // Si la longitud es menor que 2, devolvemos -1
 
         // Comprobamos que lo introducido por el usaurio es correcto mediante una
         // expresi�n regular
