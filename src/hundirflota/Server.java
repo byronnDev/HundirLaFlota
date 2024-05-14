@@ -114,65 +114,29 @@ public class Server {
         nombreJugador = pedirNombreUsuario();
 
         try {
-            int[] tiro = new int[2];
-
             out.writeObject("¡Bienvenido a Hundir la Flota, " + nombreJugador + "!");
             inicializacion(gameData.getMapaUsuario(), gameData.getMapaOrdenador());
             inicializaMapaRegistro(gameData.getMapaOrdenadorParaUsuario());
 
-            startGameLoop(gameData, tiro);
+            startGameLoop(gameData);
         } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
         }
     }
 
-    private void startGameLoop(GameData gameData, int[] tiro)
+    private void startGameLoop(GameData gameData)
             throws IOException, ClassNotFoundException {
-        boolean tiroCorrecto = false;
         while (!gameData.isJuegoTerminado()) {
             out.writeObject("MAPA DEL USUARIO:\n");
             imprimirMapa(gameData.getMapaUsuario());
             out.writeObject("PUNTOS RESTANTES DEL JUGADOR: " + gameData.getPuntosUsuario());
             out.writeObject("TURNO DEL JUGADOR");
 
-            tiroCorrecto = false;
-            while (!tiroCorrecto) {
-                tiro = pedirCasilla();
-
-                if (tiro[0] != -1 && tiro[1] != -1) {
-                    tiroCorrecto = evaluarTiro(gameData.getMapaOrdenador(), tiro);
-                }
-
-                if (!tiroCorrecto) {
-                    out.writeObject("TIRO INCORRECTO");
-                }
-            }
-
-            int puntosOrdenadorAnterior = gameData.getPuntosOrdenador();
-            gameData.setPuntosOrdenador(
-                    actualizarMapa(gameData.getMapaOrdenador(), tiro, gameData.getPuntosOrdenador()));
-            char tipoTiro = (puntosOrdenadorAnterior - gameData.getPuntosOrdenador()) > 0 ? TOCADO : AGUA;
-            actualizarMapaRegistro(gameData.getMapaOrdenadorParaUsuario(), tiro, tipoTiro);
-            out.writeObject("\nREGISTRO DEL MAPA DEL ORDENADOR");
-            imprimirMapa(gameData.getMapaOrdenadorParaUsuario());
-
-            // El juego termina si el número de puntos llega a 0
-            gameData.setJuegoTerminado((gameData.getPuntosOrdenador() == 0));
+            turnoJugador(gameData);
 
             // Si no ha ganado el jugador, le toca a la máquina
-            if (!gameData.isJuegoTerminado()) {
-                out.writeObject("PUNTOS RESTANTES DEL ORDENADOR: " + gameData.getPuntosOrdenador());
-                out.writeObject("TURNO DEL ORDENADOR");
-                tiroCorrecto = false;
-                while (!tiroCorrecto) {
-                    tiro = generaDisparoAleatorio();
-                    tiroCorrecto = evaluarTiro(gameData.getMapaUsuario(), tiro);
-                }
-
-                gameData.setPuntosUsuario(actualizarMapa(gameData.getMapaUsuario(), tiro, gameData.getPuntosUsuario()));
-
-                gameData.setJuegoTerminado((gameData.getPuntosUsuario() == 0));
-            }
+            if (!gameData.isJuegoTerminado())
+                turnoOrdenador(gameData);
         }
 
         if (gameData.getPuntosOrdenador() == 0) {
@@ -184,6 +148,62 @@ public class Server {
         stop();
     }
 
+    private void turnoJugador(GameData gameData) throws IOException, ClassNotFoundException {
+        boolean tiroCorrecto = false;
+        while (!tiroCorrecto) {
+            gameData.setTiro(pedirCasilla());
+
+            if (gameData.getTiro()[0] != -1 && gameData.getTiro()[1] != -1) {
+                tiroCorrecto = evaluarTiro(gameData.getMapaOrdenador(), gameData.getTiro());
+            }
+
+            if (!tiroCorrecto) {
+                out.writeObject("TIRO INCORRECTO");
+            }
+        }
+
+        int puntosOrdenadorAnterior = gameData.getPuntosOrdenador();
+        gameData.setPuntosOrdenador(
+                actualizarMapa(gameData.getMapaOrdenador(), gameData.getTiro(), gameData.getPuntosOrdenador()));
+        char tipoTiro = (puntosOrdenadorAnterior - gameData.getPuntosOrdenador()) > 0 ? TOCADO : AGUA;
+        actualizarMapaRegistro(gameData.getMapaOrdenadorParaUsuario(), gameData.getTiro(), tipoTiro);
+        out.writeObject("\nREGISTRO DEL MAPA DEL ORDENADOR");
+        imprimirMapa(gameData.getMapaOrdenadorParaUsuario());
+
+        // El juego termina si el número de puntos llega a 0
+        gameData.setJuegoTerminado((gameData.getPuntosOrdenador() == 0));
+    }
+
+    /*
+     * Método para el turno del ordenador, notificando si el ordenador hunde un
+     * barco.
+     */
+    private void turnoOrdenador(GameData gameData) throws IOException {
+        out.writeObject("PUNTOS RESTANTES DEL ORDENADOR: " + gameData.getPuntosOrdenador());
+        out.writeObject("TURNO DEL ORDENADOR");
+        boolean tiroCorrecto = false;
+        while (!tiroCorrecto) {
+            gameData.setTiro(generaDisparoAleatorio());
+            tiroCorrecto = evaluarTiro(gameData.getMapaUsuario(), gameData.getTiro());
+        }
+
+        gameData.setPuntosUsuario(
+                actualizarMapa(gameData.getMapaUsuario(), gameData.getTiro(), gameData.getPuntosUsuario()));
+
+        // Verificar si el ordenador ha hundido un barco
+        char barco = gameData.getMapaUsuario()[gameData.getTiro()[0]][gameData.getTiro()[1]];
+        if (barco != AGUA && barco != AGUA_NO_TOCADO && barco != TOCADO) {
+            if (shipHits.get(barco).equals(shipSizes.get(barco))) {
+                shipSunk.put(barco, true);
+                out.writeObject(
+                        "\n===============\n ¡El ordenador ha hundido tu barco de tamaño " + shipSizes.get(barco)
+                                + "! \n===============");
+            }
+        }
+
+        gameData.setJuegoTerminado((gameData.getPuntosUsuario() == 0));
+    }
+
     private GameData inicializaJuego() {
         GameData gameData = new GameData();
         gameData.setMapaUsuario(new char[TAMANIO][TAMANIO]);
@@ -192,11 +212,8 @@ public class Server {
         gameData.setPuntosUsuario(24);
         gameData.setPuntosOrdenador(24);
         gameData.setJuegoTerminado(false);
+        gameData.setTiro(new int[2]);
         return gameData;
-    }
-
-    private boolean isBarcoHundido(char barcoHundido) {
-        return barcoHundido != '\0';
     }
 
     private String pedirNombreUsuario() {
@@ -402,10 +419,28 @@ public class Server {
             mapa[tiro[0]][tiro[1]] = TOCADO;
             shipHits.put(casilla, shipHits.get(casilla) + 1);
             puntos--;
+
+            // Verificar si el barco ha sido hundido
+            if (shipHits.get(casilla).equals(shipSizes.get(casilla))) {
+                shipSunk.put(casilla, true);
+                notificarHundimiento(casilla);
+            }
         } else {
             mapa[tiro[0]][tiro[1]] = AGUA;
         }
         return puntos;
+    }
+
+    /*
+     * Método que notifica al jugador cuando un barco ha sido hundido.
+     */
+    private void notificarHundimiento(char barco) {
+        try {
+            out.writeObject("\n==============\n ¡Has hundido un barco de tamaño " + shipSizes.get(barco)
+                    + "! \n==============");
+        } catch (IOException e) {
+            System.err.println("Error al notificar el hundimiento del barco.");
+        }
     }
 
     /*
