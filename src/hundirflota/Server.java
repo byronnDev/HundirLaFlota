@@ -156,12 +156,6 @@ public class Server {
             out.writeObject("\nREGISTRO DEL MAPA DEL ORDENADOR");
             imprimirMapa(gameData.getMapaOrdenadorParaUsuario());
 
-            // Comprueba si se ha hundido un barco del ordenador
-            char barcoHundido = verificarHundimiento(gameData.getMapaOrdenador(), tiro);
-            if (isBarcoHundido(barcoHundido)) {
-                out.writeObject("¡Barco de tamaño " + shipSizes.get(barcoHundido) + " hundido!");
-            }
-
             // El juego termina si el número de puntos llega a 0
             gameData.setJuegoTerminado((gameData.getPuntosOrdenador() == 0));
 
@@ -176,12 +170,6 @@ public class Server {
                 }
 
                 gameData.setPuntosUsuario(actualizarMapa(gameData.getMapaUsuario(), tiro, gameData.getPuntosUsuario()));
-
-                // Comprueba si se ha hundido un barco del usuario
-                barcoHundido = verificarHundimiento(gameData.getMapaUsuario(), tiro);
-                if (isBarcoHundido(barcoHundido)) {
-                    out.writeObject("¡El ordenador ha hundido un barco de tamaño " + shipSizes.get(barcoHundido) + "!");
-                }
 
                 gameData.setJuegoTerminado((gameData.getPuntosUsuario() == 0));
             }
@@ -461,46 +449,6 @@ public class Server {
         } catch (IOException e) {
             e.printStackTrace();
         }
-    }
-
-    /*
-     * Método que verifica si un barco se ha hundido.
-     */
-    private char verificarHundimiento(char[][] mapa, int[] tiro) {
-        char tipoBarco = obtenerTipoBarco(mapa, tiro);
-        if (!esBarco(tipoBarco)) {
-            return '\0';
-        }
-
-        incrementarContadorDeImpactos(tipoBarco);
-        if (!esBarcoHundido(tipoBarco)) {
-            return '\0';
-        }
-
-        marcarBarcoComoHundido(tipoBarco);
-        return tipoBarco;
-    }
-
-    private char obtenerTipoBarco(char[][] mapa, int[] tiro) {
-        return mapa[tiro[0]][tiro[1]];
-    }
-
-    private boolean esBarco(char tipoBarco) {
-        return shipSizes.containsKey(tipoBarco);
-    }
-
-    private void incrementarContadorDeImpactos(char tipoBarco) {
-        int hits = shipHits.get(tipoBarco);
-        shipHits.put(tipoBarco, hits + 1);
-    }
-
-    private boolean esBarcoHundido(char tipoBarco) {
-        int hits = shipHits.get(tipoBarco);
-        return hits >= shipSizes.get(tipoBarco);
-    }
-
-    private void marcarBarcoComoHundido(char tipoBarco) {
-        shipSunk.put(tipoBarco, true);
     }
 
     /*
