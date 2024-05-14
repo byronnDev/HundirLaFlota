@@ -4,6 +4,8 @@
 
 "Hundir la Flota" es un juego de tablero clásico para dos jugadores: un usuario y el ordenador. Cada jugador tiene un tablero de 10x10 posiciones (A-J, 0-9) donde se colocan los barcos en orientación horizontal o vertical. El objetivo es hundir los barcos del oponente adivinando sus coordenadas.
 
+![image](https://github.com/byronnDev/HundirLaFlota/assets/38868773/cb3f8329-b2f8-4c19-944d-f6c683cd8ba0)
+
 ## Reglas del Juego
 
 - Cada jugador coloca 2 barcos de 5 casillas, 3 de 3 casillas y 5 de 1 casilla.
@@ -36,6 +38,8 @@ Al iniciar el juego, se te presentará un menú con las siguientes opciones:
 1. Jugar: Comienza un nuevo juego.
 2. Records: Muestra el ranking de jugadores.
 3. Salir: Cierra el juego.
+
+![image](https://github.com/byronnDev/HundirLaFlota/assets/38868773/8223cf8b-4fbb-4b72-9748-2295ffde174d)
 
 Durante el juego, se te pedirá que introduzcas las coordenadas (A-J, 0-9) donde quieres lanzar una bomba. El juego continuará hasta que todos los barcos de un jugador hayan sido hundidos.
 
