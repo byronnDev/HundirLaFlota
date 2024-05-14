@@ -94,7 +94,6 @@ public class Server {
         int puntosUsuario;
         int puntosOrdenador;
         boolean juegoTerminado;
-        int[] tiro;
 
         public char[][] getMapaUsuario() {
             return mapaUsuario;
@@ -142,14 +141,6 @@ public class Server {
 
         public void setJuegoTerminado(boolean juegoTerminado) {
             this.juegoTerminado = juegoTerminado;
-        }
-
-        public int[] getTiro() {
-            return tiro;
-        }
-
-        public void setTiro(int[] tiro) {
-            this.tiro = tiro;
         }
 
         public GameData() {
