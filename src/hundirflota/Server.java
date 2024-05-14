@@ -142,7 +142,7 @@ public class Server {
 
             // Comprueba si se ha hundido un barco del ordenador
             char barcoHundido = verificarHundimiento(gameData.getMapaOrdenador(), tiro);
-            if (barcoHundido != '\0') {
+            if (isBarcoHundido(barcoHundido)) {
                 out.writeObject("¡Barco de tamaño " + shipSizes.get(barcoHundido) + " hundido!");
             }
 
@@ -163,7 +163,7 @@ public class Server {
 
                 // Comprueba si se ha hundido un barco del usuario
                 barcoHundido = verificarHundimiento(gameData.getMapaUsuario(), tiro);
-                if (barcoHundido != '\0') {
+                if (!isBarcoHundido(barcoHundido)) {
                     out.writeObject(
                             "¡El ordenador ha hundido un barco de tamaño " + shipSizes.get(barcoHundido) + "!");
                 }
@@ -178,6 +178,10 @@ public class Server {
         } else {
             out.writeObject("EL VENCEDOR HA SIDO EL ORDENADOR");
         }
+    }
+
+    private boolean isBarcoHundido(char barcoHundido) {
+        return barcoHundido == '\0';
     }
 
     private String pedirNombreUsuario() {
