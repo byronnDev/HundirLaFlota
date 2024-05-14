@@ -45,12 +45,7 @@ public class Server {
         System.out.println("Servidor iniciado en el puerto " + port);
 
         while (true) {
-            System.out.println("Esperando conexión del cliente...");
-            clientSocket = serverSocket.accept();
-            System.out.println("Cliente conectado.");
-
-            out = new ObjectOutputStream(clientSocket.getOutputStream());
-            in = new ObjectInputStream(clientSocket.getInputStream());
+            startClientConnection();
 
             try {
                 processClientRequests();
@@ -62,6 +57,15 @@ public class Server {
                 clientSocket.close();
             }
         }
+    }
+
+    private void startClientConnection() throws IOException {
+        System.out.println("Esperando conexión del cliente...");
+        clientSocket = serverSocket.accept();
+        System.out.println("Cliente conectado.");
+
+        out = new ObjectOutputStream(clientSocket.getOutputStream());
+        in = new ObjectInputStream(clientSocket.getInputStream());
     }
 
     private void processClientRequests() throws IOException {
@@ -83,90 +87,165 @@ public class Server {
         }
     }
 
+    private class GameData {
+        char[][] mapaUsuario;
+        char[][] mapaOrdenador;
+        char[][] mapaOrdenadorParaUsuario;
+        int puntosUsuario;
+        int puntosOrdenador;
+        boolean juegoTerminado;
+        int[] tiro;
+
+        public char[][] getMapaUsuario() {
+            return mapaUsuario;
+        }
+
+        public void setMapaUsuario(char[][] mapaUsuario) {
+            this.mapaUsuario = mapaUsuario;
+        }
+
+        public char[][] getMapaOrdenador() {
+            return mapaOrdenador;
+        }
+
+        public void setMapaOrdenador(char[][] mapaOrdenador) {
+            this.mapaOrdenador = mapaOrdenador;
+        }
+
+        public char[][] getMapaOrdenadorParaUsuario() {
+            return mapaOrdenadorParaUsuario;
+        }
+
+        public void setMapaOrdenadorParaUsuario(char[][] mapaOrdenadorParaUsuario) {
+            this.mapaOrdenadorParaUsuario = mapaOrdenadorParaUsuario;
+        }
+
+        public int getPuntosUsuario() {
+            return puntosUsuario;
+        }
+
+        public void setPuntosUsuario(int puntosUsuario) {
+            this.puntosUsuario = puntosUsuario;
+        }
+
+        public int getPuntosOrdenador() {
+            return puntosOrdenador;
+        }
+
+        public void setPuntosOrdenador(int puntosOrdenador) {
+            this.puntosOrdenador = puntosOrdenador;
+        }
+
+        public boolean isJuegoTerminado() {
+            return juegoTerminado;
+        }
+
+        public void setJuegoTerminado(boolean juegoTerminado) {
+            this.juegoTerminado = juegoTerminado;
+        }
+
+        public int[] getTiro() {
+            return tiro;
+        }
+
+        public void setTiro(int[] tiro) {
+            this.tiro = tiro;
+        }
+
+        public GameData() {
+        }
+    }
+
     private void playGame() {
-        char[][] mapaUsuario = new char[TAMANIO][TAMANIO];
-        char[][] mapaOrdenador = new char[TAMANIO][TAMANIO];
-        char[][] mapaOrdenadorParaUsuario = new char[TAMANIO][TAMANIO];
-        int puntosUsuario = 24;
-        int puntosOrdenador = 24;
-        boolean juegoTerminado = false;
+        GameData gameData = new GameData();
+        gameData.setMapaUsuario(new char[TAMANIO][TAMANIO]);
+        gameData.setMapaOrdenador(new char[TAMANIO][TAMANIO]);
+        gameData.setMapaOrdenadorParaUsuario(new char[TAMANIO][TAMANIO]);
+        gameData.setPuntosUsuario(24);
+        gameData.setPuntosOrdenador(24);
+        gameData.setJuegoTerminado(false);
 
         nombreJugador = pedirNombreUsuario();
 
         try {
-            boolean tiroCorrecto = false;
             int[] tiro = new int[2];
 
             out.writeObject("¡Bienvenido a Hundir la Flota, " + nombreJugador + "!");
-            inicializacion(mapaUsuario, mapaOrdenador);
-            inicializaMapaRegistro(mapaOrdenadorParaUsuario);
+            inicializacion(gameData.getMapaUsuario(), gameData.getMapaOrdenador());
+            inicializaMapaRegistro(gameData.getMapaOrdenadorParaUsuario());
 
-            while (!juegoTerminado) {
-                out.writeObject("MAPA DEL USUARIO:\n");
-                imprimirMapa(mapaUsuario);
-                out.writeObject("PUNTOS RESTANTES DEL JUGADOR: " + puntosUsuario);
-                out.writeObject("TURNO DEL JUGADOR");
-
-                tiroCorrecto = false;
-                while (!tiroCorrecto) {
-                    tiro = pedirCasilla();
-
-                    if (tiro[0] != -1 && tiro[1] != -1) {
-                        tiroCorrecto = evaluarTiro(mapaOrdenador, tiro);
-                        if (!tiroCorrecto)
-                            out.writeObject("TIRO INCORRECTO");
-                    } else {
-                        out.writeObject("TIRO INCORRECTO");
-                    }
-                }
-
-                int puntosOrdenadorAnterior = puntosOrdenador;
-                puntosOrdenador = actualizarMapa(mapaOrdenador, tiro, puntosOrdenador);
-                char tipoTiro = (puntosOrdenadorAnterior - puntosOrdenador) > 0 ? TOCADO : AGUA;
-                actualizarMapaRegistro(mapaOrdenadorParaUsuario, tiro, tipoTiro);
-                out.writeObject("\nREGISTRO DEL MAPA DEL ORDENADOR");
-                imprimirMapa(mapaOrdenadorParaUsuario);
-
-                // Comprueba si se ha hundido un barco del ordenador
-                char barcoHundido = verificarHundimiento(mapaOrdenador, tiro);
-                if (barcoHundido != '\0') {
-                    out.writeObject("¡Barco de tamaño " + shipSizes.get(barcoHundido) + " hundido!");
-                }
-
-                // El juego termina si el número de puntos llega a 0
-                juegoTerminado = (puntosOrdenador == 0);
-
-                // Si no ha ganado el jugador, le toca a la máquina
-                if (!juegoTerminado) {
-                    out.writeObject("PUNTOS RESTANTES DEL ORDENADOR: " + puntosOrdenador);
-                    out.writeObject("TURNO DEL ORDENADOR");
-                    tiroCorrecto = false;
-                    while (!tiroCorrecto) {
-                        tiro = generaDisparoAleatorio();
-                        tiroCorrecto = evaluarTiro(mapaUsuario, tiro);
-                    }
-
-                    puntosUsuario = actualizarMapa(mapaUsuario, tiro, puntosUsuario);
-
-                    // Comprueba si se ha hundido un barco del usuario
-                    barcoHundido = verificarHundimiento(mapaUsuario, tiro);
-                    if (barcoHundido != '\0') {
-                        out.writeObject(
-                                "¡El ordenador ha hundido un barco de tamaño " + shipSizes.get(barcoHundido) + "!");
-                    }
-
-                    juegoTerminado = (puntosUsuario == 0);
-                }
-            }
-
-            if (puntosOrdenador == 0) {
-                out.writeObject("EL VENCEDOR HA SIDO EL JUGADOR");
-                updateRecords(nombreJugador, 24 - puntosUsuario);
-            } else {
-                out.writeObject("EL VENCEDOR HA SIDO EL ORDENADOR");
-            }
+            startGameLoop(gameData, tiro);
         } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
+        }
+    }
+
+    private void startGameLoop(GameData gameData, int[] tiro)
+            throws IOException, ClassNotFoundException {
+        boolean tiroCorrecto = false;
+        while (!gameData.isJuegoTerminado()) {
+            out.writeObject("MAPA DEL USUARIO:\n");
+            imprimirMapa(gameData.getMapaUsuario());
+            out.writeObject("PUNTOS RESTANTES DEL JUGADOR: " + gameData.getPuntosUsuario());
+            out.writeObject("TURNO DEL JUGADOR");
+
+            tiroCorrecto = false;
+            while (!tiroCorrecto) {
+                tiro = pedirCasilla();
+
+                if (tiro[0] != -1 && tiro[1] != -1) {
+                    tiroCorrecto = evaluarTiro(gameData.getMapaOrdenador(), tiro);
+                }
+
+                if (!tiroCorrecto) {
+                    out.writeObject("TIRO INCORRECTO");
+                }
+            }
+
+            int puntosOrdenadorAnterior = gameData.getPuntosOrdenador();
+            gameData.setPuntosOrdenador(actualizarMapa(gameData.mapaOrdenador, tiro, gameData.getPuntosOrdenador()));
+            char tipoTiro = (puntosOrdenadorAnterior - gameData.getPuntosOrdenador()) > 0 ? TOCADO : AGUA;
+            actualizarMapaRegistro(gameData.getMapaOrdenadorParaUsuario(), tiro, tipoTiro);
+            out.writeObject("\nREGISTRO DEL MAPA DEL ORDENADOR");
+            imprimirMapa(gameData.getMapaOrdenadorParaUsuario());
+
+            // Comprueba si se ha hundido un barco del ordenador
+            char barcoHundido = verificarHundimiento(gameData.getMapaOrdenador(), tiro);
+            if (barcoHundido != '\0') {
+                out.writeObject("¡Barco de tamaño " + shipSizes.get(barcoHundido) + " hundido!");
+            }
+
+            // El juego termina si el número de puntos llega a 0
+            gameData.setJuegoTerminado((gameData.getPuntosOrdenador() == 0));
+
+            // Si no ha ganado el jugador, le toca a la máquina
+            if (!gameData.isJuegoTerminado()) {
+                out.writeObject("PUNTOS RESTANTES DEL ORDENADOR: " + gameData.getPuntosOrdenador());
+                out.writeObject("TURNO DEL ORDENADOR");
+                tiroCorrecto = false;
+                while (!tiroCorrecto) {
+                    tiro = generaDisparoAleatorio();
+                    tiroCorrecto = evaluarTiro(gameData.getMapaUsuario(), tiro);
+                }
+
+                gameData.setPuntosUsuario(actualizarMapa(gameData.getMapaUsuario(), tiro, gameData.getPuntosUsuario()));
+
+                // Comprueba si se ha hundido un barco del usuario
+                barcoHundido = verificarHundimiento(gameData.getMapaUsuario(), tiro);
+                if (barcoHundido != '\0') {
+                    out.writeObject(
+                            "¡El ordenador ha hundido un barco de tamaño " + shipSizes.get(barcoHundido) + "!");
+                }
+
+                gameData.setJuegoTerminado((gameData.getPuntosUsuario() == 0));
+            }
+        }
+
+        if (gameData.getPuntosOrdenador() == 0) {
+            out.writeObject("EL VENCEDOR HA SIDO EL JUGADOR");
+            updateRecords(nombreJugador, 24 - gameData.getPuntosUsuario());
+        } else {
+            out.writeObject("EL VENCEDOR HA SIDO EL ORDENADOR");
         }
     }
 
@@ -189,10 +268,7 @@ public class Server {
         }
 
         try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            String record;
-            while ((record = reader.readLine()) != null) {
-                out.writeObject(record);
-            }
+            sendLinesOfBufferReader(reader);
         } catch (FileNotFoundException e) {
             out.writeObject("Records file not found.");
         } catch (IOException e) {
@@ -200,6 +276,13 @@ public class Server {
         }
 
         out.writeObject("END_OF_RECORDS");
+    }
+
+    private void sendLinesOfBufferReader(BufferedReader reader) throws IOException {
+        String record;
+        while ((record = reader.readLine()) != null) {
+            out.writeObject(record);
+        }
     }
 
     private void updateRecords(String playerName, int shots) {
@@ -213,12 +296,16 @@ public class Server {
     public void showRecords() {
         System.out.println("Ranking de jugadores:");
         try (BufferedReader reader = new BufferedReader(new FileReader(RECORDS_FILE))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                System.out.println(line);
-            }
+            showLinesOfBufferReader(reader);
         } catch (IOException e) {
             System.out.println("Error al leer el archivo de records.");
+        }
+    }
+
+    private void showLinesOfBufferReader(BufferedReader reader) throws IOException {
+        String line;
+        while ((line = reader.readLine()) != null) {
+            System.out.println(line);
         }
     }
 
