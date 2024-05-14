@@ -26,8 +26,9 @@
 Para instalar y ejecutar el juego, sigue estos pasos:
 
 1. Clona el repositorio: `git clone https://github.com/byronnDev/HundirLaFlota.git`
-2. Navega al directorio del proyecto: `cd HundirLaFlota\src\hundirflota`
-3. Compila y ejecuta el programa: `java hundirflota.Main.java`
+2. Navega al directorio del proyecto: `cd HundirLaFlota`
+3. Abre tu IDE favorito de Java en esa ruta.
+4. Ejecuta el programa desde el archivo: `Main.java`
 
 > **Nota:** Asegúrate de clonar el repositorio antes de ejecutar el juego.
 
