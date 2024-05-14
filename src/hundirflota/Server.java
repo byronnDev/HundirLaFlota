@@ -4,6 +4,25 @@ import java.io.*;
 import java.net.*;
 import java.util.*;
 
+/*
+ * CHECKS (TODOs)
+ * - Corregir la excepción que salta al meter sólo una letra cómo coordenada ✅
+ * - Cambia el programa para que sea cliente servidor mediate TCP ✅
+ * - En la comunicación va el resultado del disparo o las coordenadas ✅
+ * - Jugando el server contra el usuario que está en el lado del cliente ✅
+ * - El servidor guarda un ranking con el nombre y el número de disparos en el
+ * que ha sido derrotado (sólo lo garda en el caso de que el usuario desde el
+ * lado cliente gane) ✅
+ * - Menú inicial con 3 opciones: ✅
+ * Jugar
+ * Records
+ * Salir
+ * - Intenta realizar el trabajo de manera óptima y siguiendo los estándares de
+ * Java ✅
+ * 
+ * AVANZADO: Avisa cuándo se hunde un barco
+ */
+
 /**
  * HUNDIR LA FLOTA
  */
@@ -142,7 +161,7 @@ public class Server {
 
             // Comprueba si se ha hundido un barco del ordenador
             char barcoHundido = verificarHundimiento(gameData.getMapaOrdenador(), tiro);
-            if (isBarcoHundido(barcoHundido)) {
+            if (isNotBarcoHundido(barcoHundido)) {
                 out.writeObject("¡Barco de tamaño " + shipSizes.get(barcoHundido) + " hundido!");
             }
 
@@ -163,7 +182,7 @@ public class Server {
 
                 // Comprueba si se ha hundido un barco del usuario
                 barcoHundido = verificarHundimiento(gameData.getMapaUsuario(), tiro);
-                if (!isBarcoHundido(barcoHundido)) {
+                if (isNotBarcoHundido(barcoHundido)) {
                     out.writeObject(
                             "¡El ordenador ha hundido un barco de tamaño " + shipSizes.get(barcoHundido) + "!");
                 }
@@ -178,10 +197,11 @@ public class Server {
         } else {
             out.writeObject("EL VENCEDOR HA SIDO EL ORDENADOR");
         }
+        stop();
     }
 
-    private boolean isBarcoHundido(char barcoHundido) {
-        return barcoHundido == '\0';
+    private boolean isNotBarcoHundido(char barcoHundido) {
+        return barcoHundido != '\0';
     }
 
     private String pedirNombreUsuario() {
@@ -195,6 +215,8 @@ public class Server {
     }
 
     private void sendRecords() throws IOException {
+        out.writeObject("\nRanking de jugadores:");
+
         File file = new File(RECORDS_FILE);
         if (!file.exists()) {
             out.writeObject("No records found.");
@@ -225,22 +247,6 @@ public class Server {
             out.println(playerName + " - " + shots);
         } catch (IOException e) {
             System.out.println("Error al escribir en el archivo de records.");
-        }
-    }
-
-    public void showRecords() {
-        System.out.println("Ranking de jugadores:");
-        try (BufferedReader reader = new BufferedReader(new FileReader(RECORDS_FILE))) {
-            showLinesOfBufferReader(reader);
-        } catch (IOException e) {
-            System.out.println("Error al leer el archivo de records.");
-        }
-    }
-
-    private void showLinesOfBufferReader(BufferedReader reader) throws IOException {
-        String line;
-        while ((line = reader.readLine()) != null) {
-            System.out.println(line);
         }
     }
 
@@ -454,15 +460,40 @@ public class Server {
      * Método que verifica si un barco se ha hundido.
      */
     private char verificarHundimiento(char[][] mapa, int[] tiro) {
-        char barco = mapa[tiro[0]][tiro[1]];
-        if (Character.isDigit(barco)) {
-            int hits = shipHits.get(barco);
-            if (hits == shipSizes.get(barco)) {
-                shipSunk.put(barco, true);
-                return barco;
-            }
+        char tipoBarco = obtenerTipoBarco(mapa, tiro);
+        if (!esBarco(tipoBarco)) {
+            return '\0';
         }
-        return '\0';
+
+        incrementarContadorDeImpactos(tipoBarco);
+        if (!esBarcoHundido(tipoBarco)) {
+            return '\0';
+        }
+
+        marcarBarcoComoHundido(tipoBarco);
+        return tipoBarco;
+    }
+
+    private char obtenerTipoBarco(char[][] mapa, int[] tiro) {
+        return mapa[tiro[0]][tiro[1]];
+    }
+
+    private boolean esBarco(char tipoBarco) {
+        return shipSizes.containsKey(tipoBarco);
+    }
+
+    private void incrementarContadorDeImpactos(char tipoBarco) {
+        int hits = shipHits.get(tipoBarco);
+        shipHits.put(tipoBarco, hits + 1);
+    }
+
+    private boolean esBarcoHundido(char tipoBarco) {
+        int hits = shipHits.get(tipoBarco);
+        return hits >= shipSizes.get(tipoBarco);
+    }
+
+    private void marcarBarcoComoHundido(char tipoBarco) {
+        shipSunk.put(tipoBarco, true);
     }
 
     /*

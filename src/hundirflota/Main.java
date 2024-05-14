@@ -15,7 +15,7 @@ public class Main {
                 try {
                     server.start(port);
                 } catch (IOException e) {
-                    System.err.println("Error starting the server: " + e.getMessage());
+                    System.err.println(e.getMessage());
                 } // Start the server thread
             }
         }.start();
