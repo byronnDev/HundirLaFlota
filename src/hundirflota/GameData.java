@@ -7,6 +7,15 @@ public class GameData {
     int puntosUsuario;
     int puntosOrdenador;
     boolean juegoTerminado;
+    int[] tiro;
+
+    public int[] getTiro() {
+        return tiro;
+    }
+
+    public void setTiro(int[] tiro) {
+        this.tiro = tiro;
+    }
 
     public char[][] getMapaUsuario() {
         return mapaUsuario;
