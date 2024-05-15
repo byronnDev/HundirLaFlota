@@ -24,7 +24,7 @@ public class Main {
             client.connectToServer(host, port);
             client.start();
         } catch (IOException e) {
-            System.out.println("Failed to connect to the server: " + e.getMessage());
+            System.err.println("Failed to connect to the server: " + e.getMessage());
             e.printStackTrace();
         }
     }
