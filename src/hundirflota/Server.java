@@ -3,6 +3,7 @@ package hundirflota;
 import java.io.*;
 import java.net.*;
 import java.util.*;
+import java.util.function.Consumer;
 
 /*
  * CHECKS (TODOs)
@@ -20,7 +21,7 @@ import java.util.*;
  * - Intenta realizar el trabajo de manera óptima y siguiendo los estándares de
  * Java ✅
  * 
- * AVANZADO: Avisa cuándo se hunde un barco
+ * AVANZADO: Avisa cuándo se hunde un barco ✅
  */
 
 /**
@@ -32,34 +33,40 @@ public class Server {
     private static ObjectOutputStream out;
     private static ObjectInputStream in;
     private static final String RECORDS_FILE = "ranking.txt";
-    private static String nombreJugador = "Jugador"; // Nombre del jugador por defecto
+    private static final int TAMANIO = 10;
+    private static final char AGUA_NO_TOCADO = '.';
+    private static final char AGUA = 'A';
+    private static final char TOCADO = 'X';
 
-    // CONSTANTES
-    final static char AGUA_NO_TOCADO = '.';
-    final static char AGUA = 'A';
-    final static char TOCADO = 'X';
-
-    // TAMAÑO DEL TABLERO
-    final static int TAMANIO = 10;
-
-    // Mapa de barcos, impactos y hundimiento
     private Map<Character, Integer> shipSizes = new HashMap<>();
     private Map<Character, Integer> shipHits = new HashMap<>();
     private Map<Character, Boolean> shipSunk = new HashMap<>();
+    private static Map<Character, String> shipMessages = new HashMap<>();
+    private final Map<String, Consumer<Void>> commandMap;
 
     public Server() {
-        inicializaDatosBarcos();
+        // Inicializa el mapa de comandos
+        commandMap = new HashMap<>();
+        commandMap.put("play", v -> playGame());
+        commandMap.put("records", v -> sendRecords());
+        commandMap.put("exit", v -> stop());
+
+        initializeShipData();
     }
 
-    private void inicializaDatosBarcos() {
-        shipSizes.put('5', 5); // Dos barcos de tamaño 5
-        shipSizes.put('3', 3); // Tres barcos de tamaño 3
-        shipSizes.put('1', 1); // Cinco barcos de tamaño 1
+    private void initializeShipData() {
+        shipSizes.put('5', 5);
+        shipSizes.put('3', 3);
+        shipSizes.put('1', 1);
 
         for (Character shipType : shipSizes.keySet()) {
             shipHits.put(shipType, 0);
             shipSunk.put(shipType, false);
         }
+
+        shipMessages.put('5', "portaaviones");
+        shipMessages.put('3', "crucero");
+        shipMessages.put('1', "submarino");
     }
 
     public void start(int port) throws IOException {
@@ -68,16 +75,8 @@ public class Server {
 
         while (true) {
             startClientConnection();
-
-            try {
-                processClientRequests();
-            } catch (IOException e) {
-                System.out.println("Cliente desconectado.");
-            } finally {
-                in.close();
-                out.close();
-                clientSocket.close();
-            }
+            processClientRequests();
+            closeConnections();
         }
     }
 
@@ -94,14 +93,12 @@ public class Server {
         try {
             Object message;
             while ((message = in.readObject()) != null) {
-                String command = message.toString();
-                if ("play".equalsIgnoreCase(command)) {
-                    playGame();
-                } else if ("records".equalsIgnoreCase(command)) {
-                    sendRecords();
-                } else if ("exit".equalsIgnoreCase(command)) {
-                    stop();
-                    return;
+                String command = message.toString().toLowerCase();
+                Consumer<Void> action = commandMap.get(command);
+                if (action != null) {
+                    action.accept(null);
+                } else {
+                    out.writeObject("Comando no reconocido: " + command);
                 }
             }
         } catch (ClassNotFoundException e) {
@@ -110,101 +107,169 @@ public class Server {
     }
 
     private void playGame() {
-        GameData gameData = inicializaJuego();
-        nombreJugador = pedirNombreUsuario();
+        GameData gameData = initializeGame();
+        String playerName = askPlayerName();
 
         try {
-            out.writeObject("¡Bienvenido a Hundir la Flota, " + nombreJugador + "!");
-            inicializacion(gameData.getMapaUsuario(), gameData.getMapaOrdenador());
-            inicializaMapaRegistro(gameData.getMapaOrdenadorParaUsuario());
+            out.writeObject("¡Bienvenido a Hundir la Flota, " + playerName + "!");
+            initialize(gameData.getMapaUsuario(), gameData.getMapaOrdenador());
+            initializeRecordMap(gameData.getMapaOrdenadorParaUsuario());
 
-            startGameLoop(gameData);
+            startGameLoop(gameData, playerName);
         } catch (IOException | ClassNotFoundException e) {
             e.printStackTrace();
         }
     }
 
-    private void startGameLoop(GameData gameData)
+    private void startGameLoop(GameData gameData, String playerName)
             throws IOException, ClassNotFoundException {
         while (!gameData.isJuegoTerminado()) {
             out.writeObject("MAPA DEL USUARIO:\n");
-            imprimirMapa(gameData.getMapaUsuario());
+            printMap(gameData.getMapaUsuario());
             out.writeObject("PUNTOS RESTANTES DEL JUGADOR: " + gameData.getPuntosUsuario());
             out.writeObject("TURNO DEL JUGADOR");
 
-            turnoJugador(gameData);
+            playerTurn(gameData);
 
-            // Si no ha ganado el jugador, le toca a la máquina
             if (!gameData.isJuegoTerminado())
-                turnoOrdenador(gameData);
+                computerTurn(gameData);
         }
 
         if (gameData.getPuntosOrdenador() == 0) {
             out.writeObject("EL VENCEDOR HA SIDO EL JUGADOR");
-            updateRecords(nombreJugador, 24 - gameData.getPuntosUsuario());
+            updateRecords(playerName, 24 - gameData.getPuntosUsuario());
         } else {
             out.writeObject("EL VENCEDOR HA SIDO EL ORDENADOR");
         }
         stop();
     }
 
-    private void turnoJugador(GameData gameData) throws IOException, ClassNotFoundException {
-        boolean tiroCorrecto = false;
-        while (!tiroCorrecto) {
-            gameData.setTiro(pedirCasilla());
+    private void playerTurn(GameData gameData) throws IOException, ClassNotFoundException {
+        boolean correctShot = false;
+        while (!correctShot) {
+            gameData.setTiro(askForCell());
 
             if (gameData.getTiro()[0] != -1 && gameData.getTiro()[1] != -1) {
-                tiroCorrecto = evaluarTiro(gameData.getMapaOrdenador(), gameData.getTiro());
+                correctShot = evaluateShot(gameData.getMapaOrdenador(), gameData.getTiro());
             }
 
-            if (!tiroCorrecto) {
+            if (!correctShot) {
                 out.writeObject("TIRO INCORRECTO");
             }
         }
 
-        int puntosOrdenadorAnterior = gameData.getPuntosOrdenador();
-        gameData.setPuntosOrdenador(
-                actualizarMapa(gameData.getMapaOrdenador(), gameData.getTiro(), gameData.getPuntosOrdenador()));
-        char tipoTiro = (puntosOrdenadorAnterior - gameData.getPuntosOrdenador()) > 0 ? TOCADO : AGUA;
-        actualizarMapaRegistro(gameData.getMapaOrdenadorParaUsuario(), gameData.getTiro(), tipoTiro);
+        // Realizar el disparo y actualizar el mapa
+        int previousComputerPoints = gameData.getPuntosOrdenador();
+        boolean shipSunk = updateMapAndCheckSunk(gameData.getMapaOrdenador(), gameData.getTiro(), gameData);
+        char shotType = (previousComputerPoints - gameData.getPuntosOrdenador()) > 0 ? TOCADO : AGUA;
+        updateRecordMap(gameData.getMapaOrdenadorParaUsuario(), gameData.getTiro(), shotType);
         out.writeObject("\nREGISTRO DEL MAPA DEL ORDENADOR");
-        imprimirMapa(gameData.getMapaOrdenadorParaUsuario());
+        printMap(gameData.getMapaOrdenadorParaUsuario());
 
-        // El juego termina si el número de puntos llega a 0
+        // Verificar si se ha hundido un barco
+        if (shipSunk) {
+            char shipType = gameData.getMapaOrdenador()[gameData.getTiro()[0]][gameData.getTiro()[1]];
+            notifySinking(shipType, true);
+        }
+
         gameData.setJuegoTerminado((gameData.getPuntosOrdenador() == 0));
     }
 
-    /*
-     * Método para el turno del ordenador, notificando si el ordenador hunde un
-     * barco.
-     */
-    private void turnoOrdenador(GameData gameData) throws IOException {
+    private boolean updateMapAndCheckSunk(char[][] mapaOrdenador, int[] tiro, GameData gameData) {
+        int previousComputerPoints = gameData.getPuntosOrdenador();
+        gameData.setPuntosOrdenador(
+                updateMap(mapaOrdenador, tiro, gameData.getPuntosOrdenador(), true));
+
+        char shotType = (previousComputerPoints - gameData.getPuntosOrdenador()) > 0 ? TOCADO : AGUA;
+        updateRecordMap(gameData.getMapaOrdenadorParaUsuario(), tiro, shotType);
+
+        // Verificar si se ha hundido un barco
+        char barco = gameData.getMapaOrdenador()[tiro[0]][tiro[1]];
+        if (barco != AGUA && barco != AGUA_NO_TOCADO && barco != TOCADO) {
+            int[] coordenadasBarco = getShipCoordinates(gameData.getMapaOrdenador(), tiro);
+            char tipoBarco = gameData.getMapaOrdenador()[coordenadasBarco[0]][coordenadasBarco[1]];
+            if (isShipSunk(gameData.getMapaOrdenador(), coordenadasBarco, tipoBarco)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private int[] getShipCoordinates(char[][] map, int[] shot) {
+        int row = shot[0];
+        int col = shot[1];
+        char shipType = map[row][col];
+
+        int[] coordinates = new int[2];
+        for (int i = 0; i < TAMANIO; i++) {
+            for (int j = 0; j < TAMANIO; j++) {
+                if (map[i][j] == shipType) {
+                    coordinates[0] = i;
+                    coordinates[1] = j;
+                    return coordinates;
+                }
+            }
+        }
+
+        return coordinates;
+    }
+
+    private boolean isShipSunk(char[][] map, int[] coordinates, char shipType) {
+        int row = coordinates[0];
+        int col = coordinates[1];
+        int size = shipSizes.get(shipType);
+
+        if (shipSunk.get(shipType))
+            return false;
+
+        if (shipType == '5') {
+            return isShipSunk(map, row, col, size, true) || isShipSunk(map, row, col, size, false);
+        } else {
+            return isShipSunk(map, row, col, size, true) || isShipSunk(map, row, col, size, false);
+        }
+    }
+
+    private boolean isShipSunk(char[][] map, int row, int col, int size, boolean horizontal) {
+        if (horizontal) {
+            for (int j = 0; j < size; j++) {
+                if (map[row][col + j] != TOCADO)
+                    return false;
+            }
+        } else {
+            for (int j = 0; j < size; j++) {
+                if (map[row + j][col] != TOCADO)
+                    return false;
+            }
+        }
+        return true;
+    }
+
+    private void computerTurn(GameData gameData) throws IOException {
         out.writeObject("PUNTOS RESTANTES DEL ORDENADOR: " + gameData.getPuntosOrdenador());
         out.writeObject("TURNO DEL ORDENADOR");
-        boolean tiroCorrecto = false;
-        while (!tiroCorrecto) {
-            gameData.setTiro(generaDisparoAleatorio());
-            tiroCorrecto = evaluarTiro(gameData.getMapaUsuario(), gameData.getTiro());
+        boolean correctShot = false;
+        while (!correctShot) {
+            gameData.setTiro(generateRandomShot());
+            correctShot = evaluateShot(gameData.getMapaUsuario(), gameData.getTiro());
         }
 
         gameData.setPuntosUsuario(
-                actualizarMapa(gameData.getMapaUsuario(), gameData.getTiro(), gameData.getPuntosUsuario()));
+                updateMap(gameData.getMapaUsuario(), gameData.getTiro(), gameData.getPuntosUsuario(), false));
 
-        // Verificar si el ordenador ha hundido un barco
-        char barco = gameData.getMapaUsuario()[gameData.getTiro()[0]][gameData.getTiro()[1]];
-        if (barco != AGUA && barco != AGUA_NO_TOCADO && barco != TOCADO) {
-            if (shipHits.get(barco).equals(shipSizes.get(barco))) {
-                shipSunk.put(barco, true);
-                out.writeObject(
-                        "\n===============\n ¡El ordenador ha hundido tu barco de tamaño " + shipSizes.get(barco)
-                                + "! \n===============");
+        char ship = gameData.getMapaUsuario()[gameData.getTiro()[0]][gameData.getTiro()[1]];
+        if (ship != AGUA && ship != AGUA_NO_TOCADO && ship != TOCADO) {
+            int[] shipCoordinates = getShipCoordinates(gameData.getMapaUsuario(), gameData.getTiro());
+            char shipType = gameData.getMapaUsuario()[shipCoordinates[0]][shipCoordinates[1]];
+            if (isShipSunk(gameData.getMapaUsuario(), shipCoordinates, shipType)) {
+                notifySinking(shipType, false);
             }
         }
 
         gameData.setJuegoTerminado((gameData.getPuntosUsuario() == 0));
     }
 
-    private GameData inicializaJuego() {
+    private GameData initializeGame() {
         GameData gameData = new GameData();
         gameData.setMapaUsuario(new char[TAMANIO][TAMANIO]);
         gameData.setMapaOrdenador(new char[TAMANIO][TAMANIO]);
@@ -216,35 +281,43 @@ public class Server {
         return gameData;
     }
 
-    private String pedirNombreUsuario() {
+    private String askPlayerName() {
         try {
-            out.writeObject("Introduce tu nombre: ");
-            return (String) in.readObject();
+            String playerName;
+            do {
+                out.writeObject("Introduce tu nombre: ");
+                playerName = (String) in.readObject();
+            } while (playerName == null || playerName.trim().isEmpty());
+            return playerName;
         } catch (IOException | ClassNotFoundException e) {
             System.err.println("Error al leer el nombre del jugador. Se usará el nombre por defecto.");
             return "Jugador";
         }
     }
 
-    private void sendRecords() throws IOException {
-        out.writeObject("\nRanking de jugadores:");
+    private void sendRecords() {
+        try {
+            out.writeObject("\nRanking de jugadores:");
 
-        File file = new File(RECORDS_FILE);
-        if (!file.exists()) {
-            out.writeObject("No records found.");
+            File file = new File(RECORDS_FILE);
+            if (!file.exists()) {
+                out.writeObject("No records found.");
+                out.writeObject("END_OF_RECORDS");
+                return;
+            }
+
+            try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+                sendLinesOfBufferReader(reader);
+            } catch (FileNotFoundException e) {
+                out.writeObject("Records file not found.");
+            } catch (IOException e) {
+                out.writeObject("Error reading records file.");
+            }
+
             out.writeObject("END_OF_RECORDS");
-            return;
-        }
-
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            sendLinesOfBufferReader(reader);
-        } catch (FileNotFoundException e) {
-            out.writeObject("Records file not found.");
         } catch (IOException e) {
-            out.writeObject("Error reading records file.");
+            System.err.println("Error sending records to client.");
         }
-
-        out.writeObject("END_OF_RECORDS");
     }
 
     private void sendLinesOfBufferReader(BufferedReader reader) throws IOException {
@@ -273,223 +346,195 @@ public class Server {
         }
     }
 
-    // public static void main(String[] args) {
-    // Server server = new Server();
-    // try {
-    // server.start(6666);
-    // } catch (SocketException e) {
-    // System.out.println("El cliente se ha desconectado");
-    // } catch (IOException e) {
-    // e.printStackTrace();
-    // }
-    // }
-
-    private static int[] generaDisparoAleatorio() {
-        return new int[] { aleatorio(), aleatorio() };
+    private static int[] generateRandomShot() {
+        return new int[] { randomIndex(), randomIndex() };
     }
 
-    public static void inicializacion(char[][] m1, char[][] m2) {
-        inicializaMapa(m1);
-        inicializaMapa(m2);
+    private static void initialize(char[][] m1, char[][] m2) {
+        initializeMap(m1);
+        initializeMap(m2);
     }
 
-    private static void inicializaMapaRegistro(char[][] mapa) {
+    private static void initializeRecordMap(char[][] map) {
         for (int i = 0; i < TAMANIO; i++)
             for (int j = 0; j < TAMANIO; j++)
-                mapa[i][j] = AGUA_NO_TOCADO;
+                map[i][j] = AGUA_NO_TOCADO;
     }
 
-    private static void inicializaMapa(char[][] mapa) {
+    private static void initializeMap(char[][] map) {
         for (int i = 0; i < TAMANIO; i++)
             for (int j = 0; j < TAMANIO; j++)
-                mapa[i][j] = AGUA_NO_TOCADO;
+                map[i][j] = AGUA_NO_TOCADO;
 
-        // Coloca los barcos en el mapa
-        colocarBarcos(mapa, '5', 2); // Dos barcos de tamaño 5
-        colocarBarcos(mapa, '3', 3); // Tres barcos de tamaño 3
-        colocarBarcos(mapa, '1', 5); // Cinco barcos de tamaño 1
+        placeShips(map, '5', 2);
+        placeShips(map, '3', 3);
+        placeShips(map, '1', 5);
     }
 
-    /*
-     * Método que coloca los barcos en el mapa.
-     * 
-     * @param mapa El mapa donde se van a colocar los barcos
-     * 
-     * @param tipoBarco El carácter que representa el tipo de barco
-     * 
-     * @param cantidad La cantidad de barcos de ese tipo
-     */
-    private static void colocarBarcos(char[][] mapa, char tipoBarco, int cantidad) {
-        int tamano = tipoBarco == '5' ? 5 : (tipoBarco == '3' ? 3 : 1);
+    private static void placeShips(char[][] map, char shipType, int quantity) {
+        int size = shipType == '5' ? 5 : (shipType == '3' ? 3 : 1);
         Random rand = new Random();
 
-        for (int i = 0; i < cantidad; i++) {
-            boolean colocado = false;
-            while (!colocado) {
-                int fila = rand.nextInt(TAMANIO);
-                int columna = rand.nextInt(TAMANIO);
+        for (int i = 0; i < quantity; i++) {
+            boolean placed = false;
+            while (!placed) {
+                int row = rand.nextInt(TAMANIO);
+                int col = rand.nextInt(TAMANIO);
                 boolean horizontal = rand.nextBoolean();
 
-                if (puedeColocarBarco(mapa, fila, columna, tamano, horizontal)) {
-                    for (int j = 0; j < tamano; j++) {
+                if (canPlaceShip(map, row, col, size, horizontal)) {
+                    for (int j = 0; j < size; j++) {
                         if (horizontal) {
-                            mapa[fila][columna + j] = tipoBarco;
+                            map[row][col + j] = shipType;
                         } else {
-                            mapa[fila + j][columna] = tipoBarco;
+                            map[row + j][col] = shipType;
                         }
                     }
-                    colocado = true;
+                    placed = true;
                 }
             }
         }
     }
 
-    /*
-     * Método que verifica si se puede colocar un barco en una posición dada.
-     */
-    private static boolean puedeColocarBarco(char[][] mapa, int fila, int columna, int tamano, boolean horizontal) {
+    private static boolean canPlaceShip(char[][] map, int row, int col, int size, boolean horizontal) {
         if (horizontal) {
-            if (columna + tamano > TAMANIO)
+            if (col + size > TAMANIO)
                 return false;
-            for (int j = 0; j < tamano; j++) {
-                if (mapa[fila][columna + j] != AGUA_NO_TOCADO)
+            for (int j = 0; j < size; j++) {
+                if (map[row][col + j] != AGUA_NO_TOCADO)
                     return false;
             }
         } else {
-            if (fila + tamano > TAMANIO)
+            if (row + size > TAMANIO)
                 return false;
-            for (int j = 0; j < tamano; j++) {
-                if (mapa[fila + j][columna] != AGUA_NO_TOCADO)
+            for (int j = 0; j < size; j++) {
+                if (map[row + j][col] != AGUA_NO_TOCADO)
                     return false;
             }
         }
         return true;
     }
 
-    /*
-     * Método que pide una casilla al cliente.
-     */
-    private static int[] pedirCasilla() throws ClassNotFoundException, IOException {
+    private static int[] askForCell() throws ClassNotFoundException, IOException {
         out.writeObject("Introduce la casilla (por ejemplo, B4): ");
-        String linea = (String) in.readObject();
-        linea = linea.toUpperCase();
-        int[] t;
+        String line = (String) in.readObject();
+        line = line.toUpperCase();
+        int[] coordinates;
 
-        // Comprobamos que la longitud de la cadena sea mayor que 2
-        if (linea.length() < 2)
-            return new int[] { -1, -1 }; // Si la longitud es menor que 2, devolvemos -1
+        if (line.length() < 2)
+            return new int[] { -1, -1 };
 
-        // Comprobamos que lo introducido por el usaurio es correcto mediante una
-        // expresi�n regular
-        if (linea.matches("^[A-Z][0-9]*$")) {
-
-            // Obtenemos la letra.
-            // Suponemos que, como mucho, usaremos una letra del abecedario
-            char letra = linea.charAt(0);
-            // El n�mero de fila es VALOR_NUMERICO(LETRA) - VALOR_NUMERICO(A).
-            int fila = Character.getNumericValue(letra) - Character.getNumericValue('A');
-            // Para la columna, tan solo tenemos que procesar el n�mero
-            int columna = Integer.parseInt(linea.substring(1, linea.length()));
-            // Si las coordenadas est�n dentro del tama�o del tablero, las devolvemos
-            if (fila >= 0 && fila < TAMANIO && columna >= 0 && columna <= TAMANIO) {
-                t = new int[] { fila, columna };
-            } else // En otro caso, devolvemos -1, para que vuelva a solicitar el tiro
-                t = new int[] { -1, -1 };
+        if (line.matches("^[A-Z][0-9]*$")) {
+            char letter = line.charAt(0);
+            int row = Character.getNumericValue(letter) - Character.getNumericValue('A');
+            int col = Integer.parseInt(line.substring(1, line.length()));
+            if (row >= 0 && row < TAMANIO && col >= 0 && col <= TAMANIO) {
+                coordinates = new int[] { row, col };
+            } else
+                coordinates = new int[] { -1, -1 };
         } else
-            t = new int[] { -1, -1 };
+            coordinates = new int[] { -1, -1 };
 
-        return t;
+        return coordinates;
     }
 
-    /*
-     * Método que evalúa si un disparo es válido.
-     */
-    public static boolean evaluarTiro(char[][] mapa, int[] t) {
-        int fila = t[0];
-        int columna = t[1];
-        return mapa[fila][columna] == AGUA_NO_TOCADO || (mapa[fila][columna] >= '1' && mapa[fila][columna] <= '5');
+    private static boolean evaluateShot(char[][] map, int[] coordinates) {
+        int row = coordinates[0];
+        int col = coordinates[1];
+        return map[row][col] == AGUA_NO_TOCADO || (map[row][col] >= '1' && map[row][col] <= '5');
     }
 
-    /*
-     * Método que actualiza el mapa después de un disparo.
-     */
-    private int actualizarMapa(char[][] mapa, int[] tiro, int puntos) {
-        char casilla = mapa[tiro[0]][tiro[1]];
-        if (Character.isDigit(casilla)) {
-            mapa[tiro[0]][tiro[1]] = TOCADO;
-            shipHits.put(casilla, shipHits.get(casilla) + 1);
-            puntos--;
+    private int updateMap(char[][] map, int[] shot, int points, boolean isPlayer) {
+        char cell = map[shot[0]][shot[1]];
 
-            // Verificar si el barco ha sido hundido
-            if (shipHits.get(casilla).equals(shipSizes.get(casilla))) {
-                shipSunk.put(casilla, true);
-                notificarHundimiento(casilla);
+        if (Character.isDigit(cell)) {
+            map[shot[0]][shot[1]] = TOCADO;
+            shipHits.put(cell, shipHits.getOrDefault(cell, 0) + 1);
+
+            // Verifica si el barco ha sido hundido
+            if (shipHits.get(cell).equals(shipSizes.get(cell))) {
+                shipSunk.put(cell, true);
+                notifySinking(cell, isPlayer);
             }
+
+            points--;
         } else {
-            mapa[tiro[0]][tiro[1]] = AGUA;
+            map[shot[0]][shot[1]] = AGUA;
         }
-        return puntos;
+
+        return points;
     }
 
-    /*
-     * Método que notifica al jugador cuando un barco ha sido hundido.
-     */
-    private void notificarHundimiento(char barco) {
+    private void notifySinking(char ship, boolean isPlayer) {
+        String shipType = shipMessages.getOrDefault(ship, "barco");
+
         try {
-            out.writeObject("\n==============\n ¡Has hundido un barco de tamaño " + shipSizes.get(barco)
-                    + "! \n==============");
-        } catch (IOException e) {
-            System.err.println("Error al notificar el hundimiento del barco.");
-        }
-    }
-
-    /*
-     * Método que actualiza el mapa de registro.
-     */
-    private static void actualizarMapaRegistro(char[][] mapaRegistro, int[] tiro, char tipoTiro) {
-        mapaRegistro[tiro[0]][tiro[1]] = tipoTiro;
-    }
-
-    /*
-     * Método que imprime un mapa.
-     */
-    private static void imprimirMapa(char[][] mapa) throws IOException {
-        // Create a string to store the map
-        StringBuilder map = new StringBuilder();
-
-        // Calculamos las letras seg�n el tama�o
-        char[] letras = new char[TAMANIO];
-        for (int i = 0; i < TAMANIO; i++)
-            letras[i] = (char) ('A' + i);
-
-        // Append the header row to the map string
-        map.append("    ");
-        for (int i = 0; i < TAMANIO; i++) {
-            map.append("[" + i + "] ");
-        }
-        map.append("\n");
-
-        // Append the rest of the rows to the map string
-        for (int i = 0; i < TAMANIO; i++) {
-            map.append("[" + letras[i] + "]  ");
-            for (int j = 0; j < TAMANIO; j++) {
-                map.append(mapa[i][j] + "   ");
+            if (isPlayer) {
+                out.writeObject("\n===============\n ¡Has hundido un " + shipType + " enemigo! \n===============");
+            } else {
+                out.writeObject("\n===============\n ¡El ordenador ha hundido tu " + shipType + "! \n===============");
             }
-            map.append("\n");
+        } catch (IOException e) {
+            System.err.println("Error al notificar el hundimiento de un barco.");
+        }
+    }
+
+    private static void updateRecordMap(char[][] map, int[] shot, char shotType) {
+        map[shot[0]][shot[1]] = shotType;
+    }
+
+    private static void printMap(char[][] map) throws IOException {
+        StringBuilder mapString = new StringBuilder();
+
+        char[] letters = new char[TAMANIO];
+        for (int i = 0; i < TAMANIO; i++)
+            letters[i] = (char) ('A' + i);
+
+        mapString.append("    ");
+        for (int i = 0; i < TAMANIO; i++) {
+            mapString.append("[" + i + "] ");
+        }
+        mapString.append("\n");
+
+        for (int i = 0; i < TAMANIO; i++) {
+            mapString.append("[" + letters[i] + "]  ");
+            for (int j = 0; j < TAMANIO; j++) {
+                mapString.append(map[i][j] + "   ");
+            }
+            mapString.append("\n");
         }
 
-        // Send the map string to the user
         try {
-            out.writeObject(map.toString());
+            out.writeObject(mapString.toString());
+        } catch (IOException e) {
+            System.err.println("Error al imprimir el mapa.");
+        }
+    }
+
+    private static int randomIndex() {
+        return new Random().nextInt(TAMANIO);
+    }
+
+    private void closeConnections() {
+        try {
+            if (in != null)
+                in.close();
+            if (out != null)
+                out.close();
+            if (clientSocket != null)
+                clientSocket.close();
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    /*
-     * Método que genera un índice aleatorio.
-     */
-    private static int aleatorio() {
-        return new Random().nextInt(TAMANIO);
+    public static void main(String[] args) {
+        try {
+            Server server = new Server();
+            server.start(5555);
+        } catch (IOException e) {
+            System.err.println("Error al iniciar el servidor.");
+            e.printStackTrace();
+        }
     }
 }
