@@ -29,6 +29,7 @@ import java.util.function.Consumer;
  * Clase que implementa el servidor del juego Hundir la Flota.
  */
 public class Server {
+    private static final boolean DEBUG = true;
     private ServerSocket serverSocket;
     private Socket clientSocket;
     private static ObjectOutputStream out;
@@ -168,6 +169,12 @@ public class Server {
     private void startGameLoop(GameData gameData, String playerName)
             throws IOException, ClassNotFoundException {
         while (!gameData.isJuegoTerminado()) {
+            if (DEBUG) {
+                out.writeObject("=============== [DEBUG MAP] ===============");
+                out.writeObject("MAPA DEL ORDENADOR:");
+                printMap(gameData.getMapaOrdenador());
+                out.writeObject("===========================================");
+            }
             out.writeObject("MAPA DEL USUARIO:\n");
             printMap(gameData.getMapaUsuario());
             out.writeObject("PUNTOS RESTANTES DEL JUGADOR: " + gameData.getPuntosUsuario());
@@ -216,8 +223,11 @@ public class Server {
         boolean shipSunk = updateMapAndCheckSunk(gameData.getMapaOrdenador(), gameData.getTiro(), gameData);
         char shotType = (previousComputerPoints - gameData.getPuntosOrdenador()) > 0 ? TOCADO : AGUA;
         updateRecordMap(gameData.getMapaOrdenadorParaUsuario(), gameData.getTiro(), shotType);
-        out.writeObject("\nREGISTRO DEL MAPA DEL ORDENADOR");
-        printMap(gameData.getMapaOrdenadorParaUsuario());
+
+        if (!DEBUG) {
+            out.writeObject("\nREGISTRO DEL MAPA DEL ORDENADOR");
+            printMap(gameData.getMapaOrdenadorParaUsuario());
+        }
 
         // Verificar si se ha hundido un barco
         if (shipSunk) {
@@ -410,9 +420,15 @@ public class Server {
 
             File file = new File(RECORDS_FILE);
             if (!file.exists()) {
-                out.writeObject("No records found.");
-                out.writeObject("END_OF_RECORDS");
-                return;
+                out.writeObject("No se encuentra el archivo de registros.");
+                out.writeObject("Creando archivo de registros...");
+                try {
+                    file.createNewFile();
+                    out.writeObject("Archivo de registros creado.");
+                } catch (IOException e) {
+                    out.writeObject("Error al crear el archivo de registros.");
+                    return;
+                }
             }
 
             try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
@@ -421,6 +437,10 @@ public class Server {
                 out.writeObject("Records file not found.");
             } catch (IOException e) {
                 out.writeObject("Error reading records file.");
+            }
+
+            if (file.length() == 0) {
+                out.writeObject("\nNo hay ningún registro.\n");
             }
 
             out.writeObject("END_OF_RECORDS");
@@ -661,9 +681,11 @@ public class Server {
 
         try {
             if (isPlayer) {
-                out.writeObject("\n===============\n ¡Has hundido un " + shipType + " enemigo! \n===============");
+                out.writeObject("\n========================================\n ¡Has hundido un " + shipType
+                        + " enemigo! \n========================================\n");
             } else {
-                out.writeObject("\n===============\n ¡El ordenador ha hundido tu " + shipType + "! \n===============");
+                out.writeObject("\n========================================\n ¡El ordenador ha hundido tu " + shipType
+                        + "! \n========================================\n");
             }
         } catch (IOException e) {
             System.err.println("Error al notificar el hundimiento de un barco.");
