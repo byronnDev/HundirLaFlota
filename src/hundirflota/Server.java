@@ -146,6 +146,8 @@ public class Server {
         String playerName = askPlayerName();
 
         try {
+            if (DEBUG)
+                out.writeObject("=============== [RUNNING IN DEBUG MODE] ===============");
             out.writeObject("¡Bienvenido a Hundir la Flota, " + playerName + "!");
             initialize(gameData.getMapaUsuario(), gameData.getMapaOrdenador());
             initializeRecordMap(gameData.getMapaOrdenadorParaUsuario());
