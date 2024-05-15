@@ -153,7 +153,7 @@ public class Server {
 
         try {
             if (DEBUG)
-                out.writeObject("=============== [RUNNING IN DEBUG MODE] ===============");
+                out.writeObject("\n=============== [RUNNING IN DEBUG MODE] ===============\n");
             out.writeObject("¡Bienvenido a Hundir la Flota, " + playerName + "!");
             initialize(gameData.getMapaUsuario(), gameData.getMapaOrdenador());
             initializeRecordMap(gameData.getMapaOrdenadorParaUsuario());
@@ -235,6 +235,13 @@ public class Server {
         if (!DEBUG) {
             out.writeObject("\nREGISTRO DEL MAPA DEL ORDENADOR");
             printMap(gameData.getMapaOrdenadorParaUsuario());
+        }
+
+        // Sacar mensaje de si ha tocao o no
+        try {
+            out.writeObject(shotType == TOCADO ? "\nHas tocado un barco enemigo!\n" : "\n¡Agua!\n");
+        } catch (IOException e) {
+            System.err.println("Error al notificar el resultado del disparo.");
         }
 
         // Verificar si se ha hundido un barco
@@ -690,7 +697,7 @@ public class Server {
         try {
             if (isPlayer) {
                 out.writeObject("\n========================================\n ¡Has hundido un " + shipType
-                        + " enemigo! \n========================================\n");
+                        + " enemigo! \n========================================");
             } else {
                 out.writeObject("\n========================================\n ¡El ordenador ha hundido tu " + shipType
                         + "! \n========================================\n");
