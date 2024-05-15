@@ -27,9 +27,16 @@ public class Client {
             System.out.println("1. Jugar");
             System.out.println("2. Records");
             System.out.println("3. Salir");
-            System.out.print("Elige una opción: ");
-            int choice = scanner.nextInt();
-            scanner.nextLine();
+            int choice;
+            do {
+                System.out.print("Elige una opción: ");
+                while (!scanner.hasNextInt()) {
+                    System.out.print("Opción no válida, intenta de nuevo: ");
+                    scanner.next();
+                }
+                choice = scanner.nextInt();
+                scanner.nextLine();
+            } while (choice < 1 || choice > 3);
 
             switch (choice) {
                 case 1:
