@@ -26,6 +26,7 @@ import java.util.function.Consumer;
 
 /**
  * HUNDIR LA FLOTA
+ * Clase que implementa el servidor del juego Hundir la Flota.
  */
 public class Server {
     private ServerSocket serverSocket;
@@ -38,12 +39,20 @@ public class Server {
     private static final char AGUA = 'A';
     private static final char TOCADO = 'X';
 
+    // Tamaños de los barcos
     private Map<Character, Integer> shipSizes = new HashMap<>();
+    // Número de impactos en cada barco
     private Map<Character, Integer> shipHits = new HashMap<>();
+    // Estado de si cada barco ha sido hundido
     private Map<Character, Boolean> shipSunk = new HashMap<>();
+    // Mensajes asociados a cada tipo de barco
     private static Map<Character, String> shipMessages = new HashMap<>();
+    // Mapa de comandos
     private final Map<String, Consumer<Void>> commandMap;
 
+    /**
+     * Constructor de la clase Server.
+     */
     public Server() {
         // Inicializa el mapa de comandos
         commandMap = new HashMap<>();
@@ -54,6 +63,9 @@ public class Server {
         initializeShipData();
     }
 
+    /**
+     * Inicializa los datos de los barcos.
+     */
     private void initializeShipData() {
         shipSizes.put('5', 5);
         shipSizes.put('3', 3);
@@ -69,6 +81,13 @@ public class Server {
         shipMessages.put('1', "submarino");
     }
 
+    /**
+     * Inicia el servidor en el puerto especificado.
+     *
+     * @param port El puerto en el que se iniciará el servidor.
+     * @throws IOException Si ocurre un error de entrada/salida al iniciar el
+     *                     servidor.
+     */
     public void start(int port) throws IOException {
         serverSocket = new ServerSocket(port);
         System.out.println("Servidor iniciado en el puerto " + port);
@@ -80,6 +99,12 @@ public class Server {
         }
     }
 
+    /**
+     * Establece la conexión con el cliente.
+     *
+     * @throws IOException Si ocurre un error de entrada/salida al establecer la
+     *                     conexión.
+     */
     private void startClientConnection() throws IOException {
         System.out.println("Esperando conexión del cliente...");
         clientSocket = serverSocket.accept();
@@ -89,6 +114,12 @@ public class Server {
         in = new ObjectInputStream(clientSocket.getInputStream());
     }
 
+    /**
+     * Procesa las solicitudes del cliente.
+     *
+     * @throws IOException Si ocurre un error de entrada/salida durante la
+     *                     comunicación.
+     */
     private void processClientRequests() throws IOException {
         try {
             Object message;
@@ -102,10 +133,13 @@ public class Server {
                 }
             }
         } catch (ClassNotFoundException e) {
-            System.out.println("Error en la comunicación con el servidor.");
+            System.out.println("Error en la comunicación con el cliente.");
         }
     }
 
+    /**
+     * Inicia el juego con el cliente.
+     */
     private void playGame() {
         GameData gameData = initializeGame();
         String playerName = askPlayerName();
@@ -121,6 +155,16 @@ public class Server {
         }
     }
 
+    /**
+     * Inicia el bucle de juego.
+     *
+     * @param gameData   Los datos del juego.
+     * @param playerName El nombre del jugador.
+     * @throws IOException            Si ocurre un error de entrada/salida durante
+     *                                la comunicación.
+     * @throws ClassNotFoundException Si ocurre un error al leer un objeto de la
+     *                                entrada.
+     */
     private void startGameLoop(GameData gameData, String playerName)
             throws IOException, ClassNotFoundException {
         while (!gameData.isJuegoTerminado()) {
@@ -144,6 +188,15 @@ public class Server {
         stop();
     }
 
+    /**
+     * Realiza el turno del jugador.
+     *
+     * @param gameData Los datos del juego.
+     * @throws IOException            Si ocurre un error de entrada/salida durante
+     *                                la comunicación.
+     * @throws ClassNotFoundException Si ocurre un error al leer un objeto de la
+     *                                entrada.
+     */
     private void playerTurn(GameData gameData) throws IOException, ClassNotFoundException {
         boolean correctShot = false;
         while (!correctShot) {
@@ -175,6 +228,15 @@ public class Server {
         gameData.setJuegoTerminado((gameData.getPuntosOrdenador() == 0));
     }
 
+    /**
+     * Actualiza el mapa después de un disparo y verifica si se ha hundido un barco.
+     *
+     * @param mapaOrdenador El mapa del ordenador.
+     * @param tiro          Las coordenadas del disparo.
+     * @param gameData      Los datos del juego.
+     * @return {@code true} si se ha hundido un barco, {@code false} en caso
+     *         contrario.
+     */
     private boolean updateMapAndCheckSunk(char[][] mapaOrdenador, int[] tiro, GameData gameData) {
         int previousComputerPoints = gameData.getPuntosOrdenador();
         gameData.setPuntosOrdenador(
@@ -196,6 +258,13 @@ public class Server {
         return false;
     }
 
+    /**
+     * Realiza el turno del ordenador.
+     *
+     * @param gameData Los datos del juego.
+     * @throws IOException Si ocurre un error de entrada/salida durante la
+     *                     comunicación.
+     */
     private int[] getShipCoordinates(char[][] map, int[] shot) {
         int row = shot[0];
         int col = shot[1];
@@ -215,6 +284,15 @@ public class Server {
         return coordinates;
     }
 
+    /**
+     * Verifica si un barco ha sido hundido.
+     *
+     * @param map         El mapa en el que se encuentra el barco.
+     * @param coordinates Las coordenadas del barco.
+     * @param shipType    El tipo de barco.
+     * @return {@code true} si el barco ha sido hundido, {@code false} en caso
+     *         contrario.
+     */
     private boolean isShipSunk(char[][] map, int[] coordinates, char shipType) {
         int row = coordinates[0];
         int col = coordinates[1];
@@ -230,6 +308,17 @@ public class Server {
         }
     }
 
+    /**
+     * Verifica si un barco ha sido hundido en una dirección específica.
+     *
+     * @param map        El mapa en el que se encuentra el barco.
+     * @param row        La fila en la que se encuentra el barco.
+     * @param col        La columna en la que se encuentra el barco.
+     * @param size       El tamaño del barco.
+     * @param horizontal Indica si el barco está en posición horizontal.
+     * @return {@code true} si el barco ha sido hundido, {@code false} en caso
+     *         contrario.
+     */
     private boolean isShipSunk(char[][] map, int row, int col, int size, boolean horizontal) {
         if (horizontal) {
             for (int j = 0; j < size; j++) {
@@ -245,6 +334,13 @@ public class Server {
         return true;
     }
 
+    /**
+     * Realiza el turno del ordenador.
+     *
+     * @param gameData Los datos del juego.
+     * @throws IOException Si ocurre un error de entrada/salida durante la
+     *                     comunicación.
+     */
     private void computerTurn(GameData gameData) throws IOException {
         out.writeObject("PUNTOS RESTANTES DEL ORDENADOR: " + gameData.getPuntosOrdenador());
         out.writeObject("TURNO DEL ORDENADOR");
@@ -269,6 +365,11 @@ public class Server {
         gameData.setJuegoTerminado((gameData.getPuntosUsuario() == 0));
     }
 
+    /**
+     * Inicializa los datos del juego.
+     *
+     * @return Los datos del juego inicializados.
+     */
     private GameData initializeGame() {
         GameData gameData = new GameData();
         gameData.setMapaUsuario(new char[TAMANIO][TAMANIO]);
@@ -281,6 +382,11 @@ public class Server {
         return gameData;
     }
 
+    /**
+     * Pide al jugador que introduzca su nombre.
+     *
+     * @return El nombre del jugador.
+     */
     private String askPlayerName() {
         try {
             String playerName;
@@ -295,6 +401,9 @@ public class Server {
         }
     }
 
+    /**
+     * Envía los registros de los jugadores al cliente.
+     */
     private void sendRecords() {
         try {
             out.writeObject("\nRanking de jugadores:");
@@ -320,6 +429,13 @@ public class Server {
         }
     }
 
+    /**
+     * Envía las líneas de un objeto BufferedReader al cliente.
+     *
+     * @param reader El objeto BufferedReader que contiene las líneas a enviar.
+     * @throws IOException Si ocurre un error de entrada/salida al enviar las
+     *                     líneas.
+     */
     private void sendLinesOfBufferReader(BufferedReader reader) throws IOException {
         String record;
         while ((record = reader.readLine()) != null) {
@@ -327,6 +443,12 @@ public class Server {
         }
     }
 
+    /**
+     * Actualiza los registros de los jugadores.
+     *
+     * @param playerName El nombre del jugador.
+     * @param shots      El número de disparos realizados por el jugador.
+     */
     private void updateRecords(String playerName, int shots) {
         try (PrintWriter out = new PrintWriter(new FileWriter(RECORDS_FILE, true))) {
             out.println(playerName + " - " + shots);
@@ -335,32 +457,51 @@ public class Server {
         }
     }
 
+    /**
+     * Cuando se llama a este método, el servidor se detiene.
+     */
     public void stop() {
-        try {
-            in.close();
-            out.close();
-            clientSocket.close();
-            serverSocket.close();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        this.closeConnections();
     }
 
+    /**
+     * Realiza una tirada aleatoria de disparo.
+     *
+     * @return Las coordenadas de la tirada aleatoria.
+     */
     private static int[] generateRandomShot() {
         return new int[] { randomIndex(), randomIndex() };
     }
 
+    /**
+     * Inicializa el juego, colocando los barcos en los mapas del usuario y del
+     * ordenador.
+     *
+     * @param m1 Mapa del usuario.
+     * @param m2 Mapa del ordenador.
+     */
     private static void initialize(char[][] m1, char[][] m2) {
         initializeMap(m1);
         initializeMap(m2);
     }
 
+    /**
+     * Inicializa el mapa con agua no tocada.
+     *
+     * @param map El mapa que se inicializará.
+     */
     private static void initializeRecordMap(char[][] map) {
         for (int i = 0; i < TAMANIO; i++)
             for (int j = 0; j < TAMANIO; j++)
                 map[i][j] = AGUA_NO_TOCADO;
     }
 
+    /**
+     * Inicializa el mapa con agua no tocada y coloca los barcos en posiciones
+     * aleatorias.
+     *
+     * @param map El mapa que se inicializará.
+     */
     private static void initializeMap(char[][] map) {
         for (int i = 0; i < TAMANIO; i++)
             for (int j = 0; j < TAMANIO; j++)
@@ -371,6 +512,13 @@ public class Server {
         placeShips(map, '1', 5);
     }
 
+    /**
+     * Coloca los barcos en el mapa especificado.
+     *
+     * @param map      El mapa en el que se colocarán los barcos.
+     * @param shipType El tipo de barco a colocar.
+     * @param quantity La cantidad de barcos del tipo especificado a colocar.
+     */
     private static void placeShips(char[][] map, char shipType, int quantity) {
         int size = shipType == '5' ? 5 : (shipType == '3' ? 3 : 1);
         Random rand = new Random();
@@ -396,6 +544,17 @@ public class Server {
         }
     }
 
+    /**
+     * Verifica si se puede colocar un barco en una posición específica.
+     *
+     * @param map        El mapa en el que se verificará la posición.
+     * @param row        La fila en la que se verificará la posición.
+     * @param col        La columna en la que se verificará la posición.
+     * @param size       El tamaño del barco.
+     * @param horizontal Indica si el barco se colocará en posición horizontal.
+     * @return {@code true} si se puede colocar el barco en la posición
+     *         especificada, {@code false} en caso contrario.
+     */
     private static boolean canPlaceShip(char[][] map, int row, int col, int size, boolean horizontal) {
         if (horizontal) {
             if (col + size > TAMANIO)
@@ -415,6 +574,15 @@ public class Server {
         return true;
     }
 
+    /**
+     * Pide al jugador que introduzca las coordenadas de la casilla a disparar.
+     *
+     * @return Las coordenadas de la casilla a disparar.
+     * @throws ClassNotFoundException Si ocurre un error al leer un objeto de la
+     *                                entrada.
+     * @throws IOException            Si ocurre un error de entrada/salida al leer
+     *                                la entrada.
+     */
     private static int[] askForCell() throws ClassNotFoundException, IOException {
         out.writeObject("Introduce la casilla (por ejemplo, B4): ");
         String line = (String) in.readObject();
@@ -438,12 +606,29 @@ public class Server {
         return coordinates;
     }
 
+    /**
+     * Evalúa si un disparo es válido.
+     *
+     * @param map         El mapa en el que se evaluará el disparo.
+     * @param coordinates Las coordenadas del disparo.
+     * @return {@code true} si el disparo es válido, {@code false} en caso
+     *         contrario.
+     */
     private static boolean evaluateShot(char[][] map, int[] coordinates) {
         int row = coordinates[0];
         int col = coordinates[1];
         return map[row][col] == AGUA_NO_TOCADO || (map[row][col] >= '1' && map[row][col] <= '5');
     }
 
+    /**
+     * Actualiza el mapa después de un disparo y devuelve los puntos restantes.
+     *
+     * @param map      El mapa que se actualizará.
+     * @param shot     Las coordenadas del disparo.
+     * @param points   Los puntos actuales antes de la actualización.
+     * @param isPlayer Indica si el jugador es el que realizó el disparo.
+     * @return Los puntos restantes después de la actualización.
+     */
     private int updateMap(char[][] map, int[] shot, int points, boolean isPlayer) {
         char cell = map[shot[0]][shot[1]];
 
@@ -465,6 +650,12 @@ public class Server {
         return points;
     }
 
+    /**
+     * Notifica al jugador que ha hundido un barco.
+     *
+     * @param ship     El tipo de barco hundido.
+     * @param isPlayer Indica si el jugador es el que hundió el barco.
+     */
     private void notifySinking(char ship, boolean isPlayer) {
         String shipType = shipMessages.getOrDefault(ship, "barco");
 
@@ -479,10 +670,23 @@ public class Server {
         }
     }
 
+    /**
+     * Actualiza el mapa de registros después de un disparo.
+     *
+     * @param map      El mapa de registros que se actualizará.
+     * @param shot     Las coordenadas del disparo.
+     * @param shotType El tipo de disparo realizado.
+     */
     private static void updateRecordMap(char[][] map, int[] shot, char shotType) {
         map[shot[0]][shot[1]] = shotType;
     }
 
+    /**
+     * Imprime el mapa en la salida.
+     *
+     * @param map El mapa que se imprimirá.
+     * @throws IOException Si hay un error al imprimir el mapa.
+     */
     private static void printMap(char[][] map) throws IOException {
         StringBuilder mapString = new StringBuilder();
 
@@ -511,10 +715,21 @@ public class Server {
         }
     }
 
+    /**
+     * Verifica si un barco ha sido hundido.
+     *
+     * @param map         El mapa en el que se verificará el hundimiento.
+     * @param coordinates Las coordenadas del disparo.
+     * @return {@code true} si el barco ha sido hundido, {@code false} en caso
+     *         contrario.
+     */
     private static int randomIndex() {
         return new Random().nextInt(TAMANIO);
     }
 
+    /**
+     * Cierra las conexiones y los sockets.
+     */
     private void closeConnections() {
         try {
             if (in != null)
@@ -528,6 +743,9 @@ public class Server {
         }
     }
 
+    /**
+     * Clase que encapsula los datos del juego.
+     */
     public static void main(String[] args) {
         try {
             Server server = new Server();
