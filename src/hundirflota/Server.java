@@ -23,7 +23,7 @@ import java.util.function.Consumer;
  * 
  * AVANZADO: Avisa cuándo se hunde un barco ✅
  * 
- * EXTRAS: ✅
+ * EXTRAS:
  * - Añade un modo debug para ver el mapa del ordenador ✅
  * - Controlar que el usuario meta opciones válidas en el menú ✅
  * - Añadir un mensaje de bienvenida con el nombre del jugador ✅
